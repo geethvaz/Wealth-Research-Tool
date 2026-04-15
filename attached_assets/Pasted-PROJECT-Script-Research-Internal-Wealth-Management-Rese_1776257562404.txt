@@ -1,0 +1,143 @@
+PROJECT: Script Research — Internal Wealth Management Research Tool
+
+TECH STACK (mandatory, do not deviate):
+- Next.js 14 with App Router
+- Tailwind CSS
+- shadcn/ui components
+- Recharts for all charts
+- TypeScript throughout
+- Standard npm packages only — no Replit-native integrations
+
+DO NOT USE under any circumstances:
+- ReplDB or any Replit key-value store
+- Replit Object Storage
+- Replit Auth
+- Replit Deployments configuration
+All code must be fully portable and deployable on Vercel 
+without modification.
+
+ENVIRONMENT VARIABLES (reference only, never hardcode):
+- DATABASE_URL (Neon PostgreSQL)
+- ANTHROPIC_API_KEY
+- ONEDRIVE_CLIENT_ID
+- ONEDRIVE_CLIENT_SECRET
+- ONEDRIVE_TENANT_ID
+
+DATABASE: All persistence uses Neon (PostgreSQL) via the 
+'postgres' npm package connected through DATABASE_URL.
+
+FILE STORAGE: No permanent file storage on server. 
+Excel files are either downloaded directly by the user 
+or pushed to OneDrive via Microsoft Graph API.
+
+DEPLOYMENT TARGET: Vercel. Use standard Next.js 14 
+App Router folder structure. No custom build configs.
+
+---
+
+DESIGN LANGUAGE:
+- Clean, minimal, professional — Vercel dashboard aesthetic
+- Sidebar background: #0F172A (dark navy)
+- Accent colour: #0D9488 (teal)
+- Background: white (#FFFFFF)
+- Font: Inter (import from Google Fonts)
+- Rounded corners: rounded-xl throughout
+- Subtle box shadows on cards
+- Smooth hover transitions (transition-all duration-150)
+- Every element must earn its place — no unnecessary padding 
+  or decorative elements
+
+---
+
+SCREEN 1 — WATCHLIST DASHBOARD (route: /)
+
+Layout:
+- Fixed dark navy left sidebar (width: 240px)
+- Sidebar top: "Script Research" logo in white, 
+  bold, with a small chart icon
+- Sidebar navigation links (white text, teal 
+  background on active): Dashboard, Watchlist, 
+  Upload, Settings
+- Sidebar footer: dark mode toggle + "Geeth" 
+  user avatar initials
+
+Main content area:
+- Page heading "Watchlist" with subtitle 
+  "Internal research coverage"
+- Top row: 3 summary cards showing:
+  Card 1 — "Companies Covered" | 6
+  Card 2 — "Up to Date" | 4
+  Card 3 — "Last Updated" | Apr 15, 2026
+- "Add Ticker" button (teal, top right of table)
+
+Data table columns:
+Ticker | Company | Type | Rev TTM | Gross Margin | 
+EBIT Margin | EV/EBITDA | P/E | FCF Yield | 
+Last Updated | Status | Actions
+
+Mock data rows:
+- ADBE | Adobe Inc. | Software | $21.4B | 55.9% | 
+  33.1% | 17.2x | 22.3x | 4.5% | Apr 15 2026 | 
+  Current (green) | View / Refresh
+- JPM | JPMorgan Chase | Banking | $45.8B | — | 
+  33.0% | — | 16.1x | — | Apr 15 2026 | 
+  Current (green) | View / Refresh
+- SPGI | S&P Global | Financials | $15.3B | 70.1% | 
+  28.5% | 35.7x | 22.6x | 3.5% | Apr 14 2026 | 
+  Current (green) | View / Refresh
+- PLTR | Palantir | Software | $3.5B | 81.2% | 
+  16.2% | 214x | 187x | 1.8% | Mar 28 2026 | 
+  Needs Update (amber) | View / Refresh
+- C | Citigroup | Banking | $19.9B | — | 19.2% | 
+  — | 12.6x | — | Apr 15 2026 | 
+  Current (green) | View / Refresh
+- SEHK-700 | Tencent Holdings | Internet | $27.8B | 
+  55.9% | 33.1% | 17.2x | 22.3x | 3.1% | Apr 10 2026 | 
+  Needs Update (amber) | View / Refresh
+
+Table behaviour:
+- Clicking any row navigates to /company/[ticker]
+- Alternating white and #F8FAFC row colours
+- Sticky header row
+- Status badges: rounded pill, green bg for Current, 
+  amber bg for Needs Update
+
+---
+
+SCREEN 2 — UPLOAD PAGE (route: /upload)
+
+Layout: Centred single-column, max-width 640px
+
+Top section:
+- Heading: "Build a Core Sheet"
+- Subheading: "Upload the 5 source files from fiscal.ai 
+  for any ticker"
+
+Primary upload zone:
+- Large dashed border box (border-2 border-dashed 
+  border-gray-300, rounded-xl)
+- On hover/drag-over: border changes to teal, 
+  light teal background tint
+- Icon: upload cloud icon (Lucide)
+- Primary text: "Drop your fiscal.ai files here"
+- Secondary text: "or click to browse"
+- Accepted files note: ".xlsx files only"
+
+Below the drop zone — Detection Results card 
+(appears after files dropped, hidden initially):
+- "Detected Ticker:" with a teal pill badge showing 
+  e.g. "ADBE"
+- "Company Type:" with a badge showing e.g. "Software"
+- 5-item checklist:
+  ✓ Income Statement (green when found)
+  ✓ Cash Flow Statement (green when found)
+  ✓ Balance Sheet (green when found)
+  ✓ Ratios (green when found)
+  ○ Segments & KPIs (grey when missing)
+- Each file item shows the detected filename in 
+  small grey text below the label
+
+Build button:
+- "Build Core Sheet" — full width, teal
+- Disabled (grey) until all 5 items are green
+- When clicked: shows a
