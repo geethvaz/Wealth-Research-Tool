@@ -9,7 +9,13 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.45.1"
+  },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vercel/node": "^5.1.14",
     "typescript": "~5.9.2",
     "prettier": "^3.8.1"
   }
