@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+export const maxDuration = 30; // seconds — large xlsx files need time to encode
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
@@ -67,12 +69,36 @@ type DetectedFileType =
   | "segments";
 
 function detectFileType(filename: string): DetectedFileType | null {
-  const lower = filename.toLowerCase();
-  if (lower.includes("income statement")) return "income_statement";
-  if (lower.includes("cash flow")) return "cash_flow";
-  if (lower.includes("balance sheet")) return "balance_sheet";
-  if (lower.includes("ratios")) return "ratios";
-  if (lower.includes("segments")) return "segments";
+  const lower = filename.toLowerCase().replace(/[_\s]+/g, " ");
+  // Income statement — many possible names
+  if (
+    lower.includes("income statement") ||
+    lower.includes("incomestatement") ||
+    lower.includes("income stat") ||
+    lower.includes("profit & loss") ||
+    lower.includes("profit and loss") ||
+    lower.includes("p&l") ||
+    lower.includes("pnl")
+  )
+    return "income_statement";
+  // Cash flow
+  if (
+    lower.includes("cash flow") ||
+    lower.includes("cashflow") ||
+    lower.includes("cash flow statement")
+  )
+    return "cash_flow";
+  // Balance sheet
+  if (
+    lower.includes("balance sheet") ||
+    lower.includes("balancesheet") ||
+    lower.includes("balance stat")
+  )
+    return "balance_sheet";
+  // Ratios — check before segments to avoid false match
+  if (lower.includes("ratio")) return "ratios";
+  // Segments / KPIs
+  if (lower.includes("segment") || lower.includes("kpi")) return "segments";
   return null;
 }
 
@@ -80,11 +106,13 @@ function detectFileType(filename: string): DetectedFileType | null {
  * Fiscal.ai filenames follow the pattern:
  *   NYSE-ADBE-Income Statement-Quarterly.xlsx
  *   NasdaqGS-ADBE-Income Statement-Quarterly.xlsx
- *   SEHK-700-Income Statement-Quarterly.xlsx  (ticker can contain hyphens)
+ *   SEHK-700-Income Statement-Quarterly.xlsx  (numeric SEHK tickers)
  *
- * Strategy: split on hyphen, position[0] = exchange, position[1] = ticker.
- * For SEHK tickers like SEHK-700 the exchange is SEHK and ticker is 700
- * but we normalise them as "SEHK-700" for consistency.
+ * Also handles underscore-separated variants:
+ *   NYSE_ADBE_Income_Statement_Quarterly.xlsx
+ *
+ * Strategy: split on the primary separator (hyphen preferred over underscore),
+ * position[0] = exchange, position[1] = ticker.
  */
 function detectTickerAndExchange(filename: string): {
   ticker: string | null;
@@ -92,13 +120,27 @@ function detectTickerAndExchange(filename: string): {
 } {
   // Strip extension
   const base = filename.replace(/\.[^.]+$/, "");
-  const parts = base.split("-");
+
+  // Prefer hyphen splitting; fall back to underscore
+  let parts: string[];
+  if (base.includes("-")) {
+    parts = base.split("-");
+  } else if (base.includes("_")) {
+    parts = base.split("_");
+  } else {
+    return { ticker: null, exchange: null };
+  }
+
+  // Need at least exchange + ticker + one more segment
   if (parts.length < 3) return { ticker: null, exchange: null };
 
   const exchange = parts[0].trim();
   const ticker = parts[1].trim();
 
-  // Normalise SEHK tickers (e.g. exchange=SEHK, ticker=700 → "SEHK-700")
+  // Reject obviously wrong values (e.g. empty strings, file-type words)
+  if (!exchange || !ticker) return { ticker: null, exchange: null };
+
+  // Normalise SEHK tickers (exchange=SEHK, ticker=700 → stored as "SEHK-700")
   const normalisedTicker =
     exchange.toUpperCase() === "SEHK" ? `SEHK-${ticker}` : ticker.toUpperCase();
 

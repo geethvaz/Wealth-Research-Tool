@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Allow importing from the workspace lib packages
   serverExternalPackages: [],
+  experimental: {
+    // Allow large xlsx uploads (5 files × up to 5 MB each)
+    serverActions: {
+      bodySizeLimit: "30mb",
+    },
+  },
 };
 
 export default nextConfig;

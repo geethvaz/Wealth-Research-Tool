@@ -99,16 +99,21 @@ export function Upload() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files).filter((f) =>
-      f.name.endsWith(".xlsx"),
-    );
+    const all = Array.from(e.dataTransfer.files);
+    const files = all.filter((f) => f.name.toLowerCase().endsWith(".xlsx"));
+    if (all.length > 0 && files.length === 0) {
+      setError("Only .xlsx files are accepted. Please drop Excel files from fiscal.ai.");
+      return;
+    }
     uploadFiles(files);
   };
 
   const handleClick = () => fileInputRef.current?.click();
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+    const files = Array.from(e.target.files ?? []).filter((f) =>
+      f.name.toLowerCase().endsWith(".xlsx"),
+    );
     uploadFiles(files);
     // reset so the same files can be re-selected
     e.target.value = "";
@@ -203,7 +208,7 @@ export function Upload() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               multiple
               className="hidden"
               onChange={handleFileInput}
