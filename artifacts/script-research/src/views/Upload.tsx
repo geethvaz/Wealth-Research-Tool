@@ -1,7 +1,14 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { CloudUpload, CheckCircle2, Circle, AlertCircle } from "lucide-react";
+import {
+  CloudUpload,
+  CheckCircle2,
+  Circle,
+  AlertCircle,
+  Loader2,
+  Download,
+} from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +37,14 @@ const FILE_LABELS: { key: keyof FilesDetected; label: string }[] = [
   { key: "segments_kpis", label: "Segments & KPIs" },
 ];
 
+const BUILD_STEPS = [
+  "Reading uploaded files…",
+  "Detecting company type…",
+  "Mapping quarterly columns…",
+  "Building Core Sheet…",
+  "Finalizing Excel file…",
+];
+
 export function Upload() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -37,6 +52,12 @@ export function Upload() {
   const [error, setError] = useState<string | null>(null);
   const [fileNames, setFileNames] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Build state
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [buildStep, setBuildStep] = useState(BUILD_STEPS[0]);
+  const [excelBlob, setExcelBlob] = useState<Blob | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
@@ -92,6 +113,55 @@ export function Upload() {
     // reset so the same files can be re-selected
     e.target.value = "";
   };
+
+  async function buildCoreSheet() {
+    if (!result?.jobId) return;
+    setIsBuilding(true);
+    setBuildError(null);
+    setExcelBlob(null);
+
+    let stepIdx = 0;
+    setBuildStep(BUILD_STEPS[0]);
+    const interval = setInterval(() => {
+      stepIdx = Math.min(stepIdx + 1, BUILD_STEPS.length - 1);
+      setBuildStep(BUILD_STEPS[stepIdx]);
+    }, 1800);
+
+    try {
+      const res = await fetch(`/api/jobs/${result.jobId}/build`, {
+        method: "POST",
+      });
+      clearInterval(interval);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setBuildError(
+          (data as { error?: string }).error ??
+            `Build failed (${res.status})`,
+        );
+        return;
+      }
+      const blob = await res.blob();
+      setExcelBlob(blob);
+    } catch {
+      clearInterval(interval);
+      setBuildError("Network error — could not reach the build API.");
+    } finally {
+      clearInterval(interval);
+      setIsBuilding(false);
+    }
+  }
+
+  function downloadExcel() {
+    if (!excelBlob || !result) return;
+    const url = URL.createObjectURL(excelBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${result.ticker}_CoreSheet.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   const allDetected =
     result !== null && Object.values(result.filesDetected).every(Boolean);
@@ -239,15 +309,41 @@ export function Upload() {
                     })}
                   </div>
 
-                  <Button
-                    className="w-full rounded-xl h-12 text-base font-medium bg-[#0D9488] hover:bg-teal-700 text-white disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 transition-all duration-150"
-                    disabled={!allDetected}
-                    data-testid="btn-build-core-sheet"
-                  >
-                    Build Core Sheet
-                  </Button>
+                  {buildError && (
+                    <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">
+                      <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                      <span>{buildError}</span>
+                    </div>
+                  )}
 
-                  {!allDetected && (
+                  {excelBlob ? (
+                    <Button
+                      onClick={downloadExcel}
+                      className="w-full rounded-xl h-12 text-base font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-150"
+                      data-testid="btn-download-excel"
+                    >
+                      <Download className="h-5 w-5 mr-2" />
+                      Download Core Sheet (.xlsx)
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={buildCoreSheet}
+                      className="w-full rounded-xl h-12 text-base font-medium bg-[#0D9488] hover:bg-teal-700 text-white disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 transition-all duration-150"
+                      disabled={!allDetected || isBuilding}
+                      data-testid="btn-build-core-sheet"
+                    >
+                      {isBuilding ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          {buildStep}
+                        </>
+                      ) : (
+                        "Build Core Sheet"
+                      )}
+                    </Button>
+                  )}
+
+                  {!allDetected && !excelBlob && (
                     <p className="text-xs text-center text-slate-400 mt-3">
                       Upload all 5 files to enable building
                     </p>
