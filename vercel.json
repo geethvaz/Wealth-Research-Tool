@@ -1,0 +1,12 @@
+{
+  "framework": null,
+  "buildCommand": "pnpm --filter @workspace/script-research build",
+  "outputDirectory": "artifacts/script-research/dist/public",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url"
+  }
+}

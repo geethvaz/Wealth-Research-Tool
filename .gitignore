@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment files (contain secrets)
+.env.local
+.env.*.local
+
+# Next.js / Vite build output
+.next/
+
