@@ -1,4 +1,5 @@
 {
+  "framework": "nextjs",
   "buildCommand": "pnpm --filter @workspace/script-research run build",
   "outputDirectory": "artifacts/script-research/.next",
   "installCommand": "pnpm install",
