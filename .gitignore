@@ -55,3 +55,4 @@ Thumbs.db
 # Next.js / Vite build output
 .next/
 
+.vercel

@@ -6,7 +6,12 @@
       "Bash(gh auth *)",
       "Bash(git config *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx vercel *)",
+      "Bash(pnpm --version)",
+      "Bash(vercel whoami *)",
+      "Bash(pnpm build *)"
     ]
   }
 }

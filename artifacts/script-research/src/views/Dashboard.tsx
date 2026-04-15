@@ -1,5 +1,7 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useRouter } from "next/navigation";
 import { Plus, Eye, RefreshCw } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Shape returned by GET /api/companies
 interface Company {
   id: number;
   ticker: string;
@@ -40,7 +41,10 @@ function TableSkeleton() {
   return (
     <>
       {Array.from({ length: 6 }).map((_, i) => (
-        <TableRow key={i} className="border-b border-slate-100 dark:border-slate-800/50">
+        <TableRow
+          key={i}
+          className="border-b border-slate-100 dark:border-slate-800/50"
+        >
           {Array.from({ length: 7 }).map((_, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full rounded" />
@@ -53,7 +57,7 @@ function TableSkeleton() {
 }
 
 export function Dashboard() {
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +88,10 @@ export function Dashboard() {
 
   return (
     <Layout>
-      <div className="p-8 max-w-[1400px] w-full mx-auto" data-testid="page-dashboard">
+      <div
+        className="p-8 max-w-[1400px] w-full mx-auto"
+        data-testid="page-dashboard"
+      >
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1
@@ -176,27 +183,13 @@ export function Dashboard() {
           <Table>
             <TableHeader className="bg-slate-50 dark:bg-slate-900">
               <TableRow className="border-b border-slate-200 dark:border-slate-800 hover:bg-transparent">
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">
-                  Ticker
-                </TableHead>
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">
-                  Company
-                </TableHead>
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">
-                  Type
-                </TableHead>
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">
-                  Exchange
-                </TableHead>
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">
-                  Last Updated
-                </TableHead>
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200 text-center">
-                  Status
-                </TableHead>
-                <TableHead className="font-semibold text-slate-900 dark:text-slate-200 text-right">
-                  Actions
-                </TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">Ticker</TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">Company</TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">Type</TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">Exchange</TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200">Last Updated</TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200 text-center">Status</TableHead>
+                <TableHead className="font-semibold text-slate-900 dark:text-slate-200 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -211,7 +204,7 @@ export function Dashboard() {
                         ? "bg-[#F8FAFC] dark:bg-slate-900/20"
                         : "bg-white dark:bg-transparent"
                     }`}
-                    onClick={() => setLocation(`/company/${company.ticker}`)}
+                    onClick={() => router.push(`/company/${company.ticker}`)}
                     data-testid={`row-company-${company.ticker.toLowerCase()}`}
                   >
                     <TableCell className="font-semibold text-slate-900 dark:text-white">
@@ -252,7 +245,7 @@ export function Dashboard() {
                           size="icon"
                           className="h-8 w-8 text-slate-500 hover:text-[#0D9488] hover:bg-teal-50 dark:hover:bg-teal-900/20"
                           title="View Details"
-                          onClick={() => setLocation(`/company/${company.ticker}`)}
+                          onClick={() => router.push(`/company/${company.ticker}`)}
                           data-testid={`btn-view-${company.ticker.toLowerCase()}`}
                         >
                           <Eye className="h-4 w-4" />

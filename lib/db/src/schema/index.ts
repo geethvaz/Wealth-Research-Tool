@@ -111,6 +111,7 @@ export const uploadedFilesTable = pgTable("uploaded_files", {
     .references(() => buildJobsTable.id, { onDelete: "cascade" }),
   file_type: fileTypeEnum("file_type").notNull(),
   original_filename: text("original_filename").notNull(),
+  file_data: text("file_data"), // base64-encoded file bytes
   is_screenshot: boolean("is_screenshot").notNull().default(false),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
