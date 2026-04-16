@@ -4,6 +4,39 @@ import { getDb, companiesTable, buildJobsTable, uploadedFilesTable } from "@/lib
 
 export const maxDuration = 30;
 
+// ─── Company name lookup ─────────────────────────────────────────────────────
+
+const COMPANY_NAMES: Record<string, string> = {
+  ADBE: "Adobe Inc.",
+  AAPL: "Apple Inc.",
+  AMZN: "Amazon.com Inc.",
+  ASML: "ASML Holding NV",
+  BAC: "Bank of America",
+  C: "Citigroup Inc.",
+  CRWD: "CrowdStrike Holdings",
+  ETN: "Eaton Corporation",
+  GD: "General Dynamics",
+  HOOD: "Robinhood Markets",
+  IBKR: "Interactive Brokers",
+  JPM: "JPMorgan Chase & Co.",
+  MCO: "Moody's Corporation",
+  META: "Meta Platforms Inc.",
+  MSFT: "Microsoft Corporation",
+  NBIS: "Nebius Group",
+  NVDA: "NVIDIA Corporation",
+  PANW: "Palo Alto Networks",
+  PLTR: "Palantir Technologies",
+  RTX: "RTX Corporation",
+  SPGI: "S&P Global Inc.",
+  TMO: "Thermo Fisher Scientific",
+  TSLA: "Tesla Inc.",
+  VRT: "Vertiv Holdings",
+  ANET: "Arista Networks",
+  CI: "Cigna Group",
+  GOOGL: "Alphabet Inc.",
+  "SEHK-700": "Tencent Holdings",
+};
+
 // ─── Detection helpers ────────────────────────────────────────────────────────
 
 type DetectedFileType =
@@ -116,7 +149,7 @@ export async function POST(req: Request) {
         .insert(companiesTable)
         .values({
           ticker: detectedTicker,
-          name: detectedTicker,
+          name: COMPANY_NAMES[detectedTicker] || detectedTicker,
           exchange: detectedExchange,
           company_type: null,
           status: "needs_update",

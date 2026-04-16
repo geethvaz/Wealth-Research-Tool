@@ -8,6 +8,8 @@ import {
   AlertCircle,
   Loader2,
   Download,
+  ImageIcon,
+  X,
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,6 +71,83 @@ export function Upload() {
   const [excelBlob, setExcelBlob] = useState<Blob | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [bullBear, setBullBear] = useState<BullBearData | null>(null);
+
+  // Screenshot upload state
+  const [screenshotTicker, setScreenshotTicker] = useState("");
+  const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
+  const [isScreenshotDragging, setIsScreenshotDragging] = useState(false);
+  const [screenshotUploading, setScreenshotUploading] = useState(false);
+  const [screenshotExtracting, setScreenshotExtracting] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const [screenshotResult, setScreenshotResult] = useState<{
+    statementsFound: number;
+    ticker: string | null;
+  } | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
+
+  async function uploadAndExtractScreenshots() {
+    if (screenshotFiles.length === 0 || !screenshotTicker.trim()) return;
+    setScreenshotUploading(true);
+    setScreenshotError(null);
+    setScreenshotResult(null);
+
+    try {
+      // Step 1: Create a job for this ticker
+      const jobRes = await fetch("/api/create-screenshot-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: screenshotTicker.trim() }),
+      });
+      const jobData = await jobRes.json();
+      if (!jobRes.ok) {
+        setScreenshotError(jobData.error ?? "Failed to create job");
+        return;
+      }
+      const jobId = jobData.jobId as number;
+
+      // Step 2: Upload screenshots
+      const formData = new FormData();
+      formData.append("jobId", String(jobId));
+      for (const file of screenshotFiles) {
+        formData.append("screenshots", file);
+      }
+      const uploadRes = await fetch("/api/upload-screenshots", {
+        method: "POST",
+        body: formData,
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) {
+        setScreenshotError(uploadData.error ?? "Failed to upload screenshots");
+        return;
+      }
+
+      // Step 3: Extract via Claude vision
+      setScreenshotUploading(false);
+      setScreenshotExtracting(true);
+      const extractRes = await fetch(`/api/jobs/${jobId}/extract-screenshots`, {
+        method: "POST",
+      });
+      const extractData = await extractRes.json();
+      if (!extractRes.ok) {
+        setScreenshotError(extractData.error ?? "Extraction failed");
+        return;
+      }
+
+      setScreenshotResult({
+        statementsFound: extractData.statementsFound,
+        ticker: extractData.ticker,
+      });
+    } catch {
+      setScreenshotError("Network error — could not reach the API.");
+    } finally {
+      setScreenshotUploading(false);
+      setScreenshotExtracting(false);
+    }
+  }
+
+  function removeScreenshot(index: number) {
+    setScreenshotFiles((prev) => prev.filter((_, i) => i !== index));
+  }
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
@@ -299,6 +378,197 @@ export function Upload() {
             <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">
               <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* ─── Screenshot Upload Section ─── */}
+          <div className="mt-12 mb-2">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                or
+              </span>
+              <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+            </div>
+          </div>
+
+          <div className="text-center mb-6">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Upload screenshots for non-fiscal.ai companies
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              For companies like Tencent (SEHK-700) where fiscal.ai files are not available
+            </p>
+          </div>
+
+          {/* Ticker input */}
+          <div className="mb-4">
+            <label
+              htmlFor="screenshot-ticker"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
+            >
+              Ticker
+            </label>
+            <input
+              id="screenshot-ticker"
+              type="text"
+              placeholder="e.g. SEHK-700, BABA"
+              value={screenshotTicker}
+              onChange={(e) => setScreenshotTicker(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0D9488] focus:border-transparent transition-all duration-150"
+            />
+          </div>
+
+          {/* Screenshot drop zone */}
+          <div
+            className={`w-full rounded-xl border-2 border-dashed p-8 flex flex-col items-center justify-center transition-all duration-150 cursor-pointer ${
+              isScreenshotDragging
+                ? "border-[#0D9488] bg-teal-50/50 dark:bg-teal-900/10"
+                : "border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 hover:border-[#0D9488] hover:bg-teal-50/30 dark:hover:border-teal-700"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsScreenshotDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsScreenshotDragging(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsScreenshotDragging(false);
+              const all = Array.from(e.dataTransfer.files);
+              const images = all.filter((f) =>
+                /\.(png|jpe?g)$/i.test(f.name),
+              );
+              if (all.length > 0 && images.length === 0) {
+                setScreenshotError("Only PNG/JPG image files are accepted.");
+                return;
+              }
+              setScreenshotFiles((prev) => [...prev, ...images]);
+              setScreenshotError(null);
+            }}
+            onClick={() => screenshotInputRef.current?.click()}
+          >
+            <input
+              ref={screenshotInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const images = Array.from(e.target.files ?? []).filter((f) =>
+                  /\.(png|jpe?g)$/i.test(f.name),
+                );
+                setScreenshotFiles((prev) => [...prev, ...images]);
+                setScreenshotError(null);
+                e.target.value = "";
+              }}
+            />
+            <div
+              className={`p-3 rounded-full mb-3 ${
+                isScreenshotDragging
+                  ? "bg-teal-100 dark:bg-teal-900/50 text-[#0D9488]"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <ImageIcon className="h-6 w-6" />
+            </div>
+            <p className="text-base font-medium text-slate-900 dark:text-slate-200">
+              Drop screenshot images here
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              or click to browse
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-4 font-medium">
+              PNG / JPG only
+            </p>
+          </div>
+
+          {/* Queued screenshot files */}
+          {screenshotFiles.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {screenshotFiles.map((file, idx) => (
+                <div
+                  key={`${file.name}-${idx}`}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ImageIcon className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span className="text-slate-700 dark:text-slate-300 truncate">
+                      {file.name}
+                    </span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeScreenshot(idx);
+                    }}
+                    className="ml-2 p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Screenshot error */}
+          {screenshotError && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">
+              <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+              <span>{screenshotError}</span>
+            </div>
+          )}
+
+          {/* Extract button */}
+          {screenshotFiles.length > 0 && !screenshotResult && (
+            <Button
+              onClick={uploadAndExtractScreenshots}
+              disabled={
+                !screenshotTicker.trim() ||
+                screenshotUploading ||
+                screenshotExtracting
+              }
+              className="w-full mt-4 rounded-xl h-12 text-base font-medium bg-[#0D9488] hover:bg-teal-700 text-white disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 transition-all duration-150"
+            >
+              {screenshotUploading ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Uploading screenshots...
+                </>
+              ) : screenshotExtracting ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Extracting with Claude AI...
+                </>
+              ) : (
+                "Extract with Claude AI"
+              )}
+            </Button>
+          )}
+
+          {/* Screenshot extraction result */}
+          {screenshotResult && (
+            <div className="mt-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <Card className="rounded-xl shadow-sm border-slate-200 dark:border-slate-800">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    <span className="text-lg font-semibold text-slate-900 dark:text-white">
+                      Extraction Complete
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    {screenshotResult.statementsFound} statement
+                    {screenshotResult.statementsFound !== 1 ? "s" : ""} extracted
+                    {screenshotResult.ticker
+                      ? ` for ${screenshotResult.ticker}`
+                      : ""}
+                    . Data has been stored and is ready for Core Sheet building.
+                  </p>
+                </CardContent>
+              </Card>
             </div>
           )}
 

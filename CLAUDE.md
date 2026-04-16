@@ -21,7 +21,7 @@ entire workflow: upload files, auto-detect everything, build Excel, download/syn
 - Frontend + API routes: Next.js 15 (App Router), Tailwind CSS, shadcn/ui, TypeScript
 - Database: Neon PostgreSQL via @neondatabase/serverless + Drizzle ORM
 - Excel builder: Python (openpyxl) via Vercel Python serverless function at `/api/build_core_sheet.py`
-- AI: Claude Sonnet via Anthropic SDK
+- AI: Claude Sonnet via Anthropic SDK (use model name `claude-sonnet-4-5`, not dated versions)
 - File storage: Neon (base64 in uploaded_files table) + OneDrive output via Microsoft Graph API
 - Charts: Recharts
 - Icons: Lucide React
@@ -93,7 +93,8 @@ uploaded_files: id, job_id (FK), file_type (income_statement/cash_flow/balance_s
 
 ## Key API Routes
 - `POST /api/upload` — accepts multipart FormData with up to 5 .xlsx files, detects ticker/exchange/file type, stores base64 in Neon, creates build_jobs record
-- `POST /api/upload-screenshots` — accepts PNG/JPG images for non-fiscal.ai companies
+- `POST /api/create-screenshot-job` — creates a company + build job for screenshot-based uploads (takes ticker in JSON body)
+- `POST /api/upload-screenshots` — accepts PNG/JPG images for non-fiscal.ai companies (requires jobId in FormData)
 - `POST /api/jobs/[jobId]/build` — triggers Python Excel builder, returns .xlsx blob
 - `POST /api/jobs/[jobId]/extract-screenshots` — Claude vision extraction (Session 4)
 - `POST /api/jobs/[jobId]/generate-bull-bear` — Claude thesis generation (Session 4)
@@ -150,20 +151,19 @@ ADBE (Software), JPM (Banking), SPGI (Financials), PLTR (Software), C (Banking),
 - **Session 2:** File upload pipeline (drag-drop, ticker detection, base64 storage), Next.js 15 migration from Vite+Wouter
 - **Session 3:** Python Excel builder (`/api/build_core_sheet.py`), software template, build pipeline wired to upload page
 - **Session 4:** Claude screenshot extraction (vision API), Bull Bear thesis generation
+- **Session 5:** Screenshot upload UI on Upload page, all 4 company type templates (software, banking, financials, internet) built in Python builder, `create-screenshot-job` API route
 
 ## Build Sessions Remaining
-- **Session 5:** OneDrive sync (Microsoft Graph API OAuth), company detail page with real data
-- **Session 6:** Banking template (JPM, C style), Financials template (SPGI style)
+- **Session 6:** OneDrive sync (Microsoft Graph API OAuth), company detail page with real data
 - **Session 7:** Final polish, testing, production hardening
 
 ## Current Status & Known Issues
-- The Vite+Wouter migration that broke API routes has been fixed (restored Next.js)
 - Build succeeds locally with `next build`
 - `DATABASE_URL` and `ANTHROPIC_API_KEY` must be set in Vercel env vars for the app to function
-- OneDrive integration is not yet built (Session 5)
-- Company detail page still shows mock data (Session 5)
-- Banking and Financials Excel templates are not yet in the Python builder (Session 6)
-- The Python builder currently only handles the "software" company type template
+- All 4 company type templates are now built in the Python builder: software, banking, financials, internet
+- Screenshot upload UI is live on the Upload page (for non-fiscal.ai companies like Tencent)
+- OneDrive integration is not yet built (Session 6)
+- Company detail page still uses mock data (Session 6)
 
 ## Design Language
 - Clean, minimal, professional (Vercel/Linear aesthetic)

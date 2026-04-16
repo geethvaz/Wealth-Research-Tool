@@ -19,6 +19,7 @@ import {
 
 interface CoreData {
   income_statement?: Record<string, Record<string, number>>;
+  cash_flow?: Record<string, Record<string, number>>;
   valuation?: Record<string, Record<string, number>>;
   quarters?: string[];
 }
@@ -72,7 +73,7 @@ function TableSkeleton() {
     <>
       {Array.from({ length: 6 }).map((_, i) => (
         <TableRow key={i} className="border-b border-slate-100 dark:border-slate-800/50">
-          {Array.from({ length: 10 }).map((_, j) => (
+          {Array.from({ length: 12 }).map((_, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full rounded" />
             </TableCell>
@@ -302,9 +303,11 @@ export function Dashboard() {
                     <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Type</TableHead>
                     <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">Rev TTM</TableHead>
                     <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">Gross Margin</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">EBIT Margin</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">EV/EBITDA</TableHead>
                     <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">P/E</TableHead>
-                    <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">ROE</TableHead>
-                    <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Updated</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right">FCF Yield</TableHead>
+                    <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Last Updated</TableHead>
                     <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-center">Status</TableHead>
                     <TableHead className="font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right pr-5">Actions</TableHead>
                   </TableRow>
@@ -317,12 +320,15 @@ export function Dashboard() {
                       const cd = company.core_data;
                       const revSeries = cd?.income_statement?.revenue;
                       const lastRev = getLastVal(revSeries);
-                      const gmSeries = cd?.income_statement?.gross_margin;
-                      const lastGM = getLastVal(gmSeries);
-                      const peSeries = cd?.valuation?.pe;
-                      const lastPE = getLastVal(peSeries);
-                      const roeSeries = cd?.valuation?.roe;
-                      const lastROE = getLastVal(roeSeries);
+                      const lastGM = getLastVal(cd?.income_statement?.gross_margin);
+                      const lastEBITMargin = getLastVal(cd?.income_statement?.operating_margin);
+                      const lastEvEbitda = getLastVal(cd?.valuation?.ev_ebitda);
+                      const lastPE = getLastVal(cd?.valuation?.pe);
+                      const lastFcf = getLastVal(cd?.cash_flow?.fcf);
+                      const lastMktCap = getLastVal(cd?.valuation?.market_cap);
+                      const fcfYield = lastFcf !== null && lastMktCap !== null && lastMktCap !== 0
+                        ? lastFcf / lastMktCap
+                        : null;
                       const typeColor = TYPE_COLORS[company.company_type?.toLowerCase() ?? ""] ?? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
 
                       return (
@@ -362,18 +368,16 @@ export function Dashboard() {
                             {cd ? fmtPct(lastGM) : "\u2014"}
                           </TableCell>
                           <TableCell className="text-right text-slate-700 dark:text-slate-300 font-mono text-sm tabular-nums">
+                            {cd ? fmtPct(lastEBITMargin) : "\u2014"}
+                          </TableCell>
+                          <TableCell className="text-right text-slate-700 dark:text-slate-300 font-mono text-sm tabular-nums">
+                            {cd ? fmtRatio(lastEvEbitda) : "\u2014"}
+                          </TableCell>
+                          <TableCell className="text-right text-slate-700 dark:text-slate-300 font-mono text-sm tabular-nums">
                             {cd ? fmtRatio(lastPE) : "\u2014"}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <span className={`font-mono text-sm tabular-nums ${
-                              lastROE !== null && lastROE > 0
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : lastROE !== null && lastROE < 0
-                                  ? "text-red-600 dark:text-red-400"
-                                  : "text-slate-700 dark:text-slate-300"
-                            }`}>
-                              {cd ? fmtPct(lastROE) : "\u2014"}
-                            </span>
+                          <TableCell className="text-right text-slate-700 dark:text-slate-300 font-mono text-sm tabular-nums">
+                            {cd ? fmtPct(fcfYield) : "\u2014"}
                           </TableCell>
                           <TableCell className="text-slate-500 dark:text-slate-400 whitespace-nowrap text-sm">
                             {formatDate(company.last_updated)}
