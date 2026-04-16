@@ -146,6 +146,9 @@ export function Upload() {
       }
       const blob = await res.blob();
       setExcelBlob(blob);
+
+      // Update job status in background (don't block the user)
+      fetch(`/api/jobs/${result.jobId}/complete`, { method: "POST" }).catch(() => {});
     } catch {
       clearInterval(interval);
       setBuildError("Network error — could not reach the build API.");

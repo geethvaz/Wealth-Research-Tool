@@ -84,8 +84,9 @@ def fetch_sheets(job_id: int) -> dict:
         if key and file_data and key not in sheets:
             try:
                 file_bytes = base64.b64decode(file_data)
-                wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
-                sheets[key] = wb.active
+                wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=False)
+                # Use the first sheet (fiscal.ai files typically have one data sheet)
+                sheets[key] = wb.worksheets[0]
             except Exception:
                 continue  # skip corrupted files
 
