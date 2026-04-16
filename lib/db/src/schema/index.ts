@@ -60,6 +60,7 @@ export const coreSheetsTable = pgTable("core_sheets", {
   id: serial("id").primaryKey(),
   company_id: integer("company_id")
     .notNull()
+    .unique()
     .references(() => companiesTable.id, { onDelete: "cascade" }),
   quarters: jsonb("quarters").$type<string[]>(),
   income_statement: jsonb("income_statement"),

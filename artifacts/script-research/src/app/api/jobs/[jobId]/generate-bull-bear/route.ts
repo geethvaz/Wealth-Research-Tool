@@ -6,28 +6,33 @@ import { getAnthropicClient } from "@/lib/anthropic";
 
 export const maxDuration = 30;
 
-const SYSTEM_PROMPT = `You are a senior equity research analyst at a top-tier investment firm. Generate a concise, data-driven investment thesis for the company provided. Be direct and specific — no filler. Each bullet point must reference actual numbers.
+const SYSTEM_PROMPT = `You are a senior equity research analyst at a top-tier wealth management firm. You have access to the company's actual quarterly financial data. Analyze the data carefully and generate a specific, data-driven investment thesis.
+
+Rules:
+- Every bullet point MUST reference actual numbers, margins, growth rates, or trends from the data provided
+- Be direct and specific — no generic statements like "strong market position" without data backing
+- Reference specific quarters, YoY changes, margin trends, and absolute figures
+- If you see declining metrics, call them out honestly in the bear case
+- Tailwinds should be structural/industry-level drivers specific to the company's business
 
 Return ONLY valid JSON in this exact structure:
 {
   "bull_case": [
-    "string", "string", "string", "string", "string"
+    "string (3-5 items, each 1-2 sentences with specific numbers)"
   ],
   "bear_case": [
-    "string", "string", "string", "string"
+    "string (3-5 items, each 1-2 sentences with specific numbers)"
   ],
   "tailwinds": [
-    "string", "string", "string", "string"
+    "string (3-5 structural tailwinds specific to the company's industry and business model)"
   ],
   "headwinds": [
-    "string", "string", "string", "string"
+    "string (3-5 risks or headwinds with data backing where possible)"
   ],
   "watchlist_metrics": [
-    "string", "string", "string", "string", "string", "string"
+    "string (5-6 specific metrics to monitor going forward, with current values and why they matter)"
   ]
-}
-
-Each string should be 1-2 sentences maximum. Reference specific metrics and numbers from the data provided. Do not use generic statements.`;
+}`;
 
 export async function POST(
   _req: NextRequest,
@@ -102,7 +107,8 @@ export async function POST(
       );
     }
 
-    // Store in core_sheets
+    // Ensure unique index exists, then upsert bull_bear
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS core_sheets_company_id_unique ON core_sheets(company_id)`;
     await sql`
       INSERT INTO core_sheets (company_id, bull_bear, created_at, updated_at)
       VALUES (${company.id}, ${JSON.stringify(bullBearData)}::jsonb, NOW(), NOW())

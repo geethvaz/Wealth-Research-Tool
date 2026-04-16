@@ -40,10 +40,11 @@ const FILE_LABELS: { key: keyof FilesDetected; label: string }[] = [
 const BUILD_STEPS = [
   "Reading uploaded files…",
   "Detecting company type…",
-  "Generating Bull/Bear thesis (Claude AI)…",
   "Mapping quarterly columns…",
   "Building Core Sheet…",
-  "Finalizing Excel file…",
+  "Generating Bull/Bear thesis (Claude AI)…",
+  "Finalizing Excel with thesis…",
+  "Done!",
 ];
 
 interface BullBearData {
@@ -146,32 +147,10 @@ export function Upload() {
     try {
       // Step 1-2: Reading files, detecting type
       advanceStep();
-      await new Promise((r) => setTimeout(r, 600));
 
-      // Step 3: Generate Bull/Bear thesis via Claude API
+      // Step 3: Build Excel first (this also stores financial metrics in DB)
       advanceStep();
-      try {
-        const bbRes = await fetch(`/api/jobs/${result.jobId}/generate-bull-bear`, {
-          method: "POST",
-        });
-        if (bbRes.ok) {
-          // Fetch the generated thesis to display
-          const bbData = await bbRes.json();
-          if (bbData.bull_bear) {
-            setBullBear(bbData.bull_bear);
-          }
-        }
-        // Non-fatal if bull/bear fails — continue with build
-      } catch {
-        // Bull/bear generation failed, continue anyway
-      }
-
-      // Step 4-5: Map columns, build Excel
       advanceStep();
-      await new Promise((r) => setTimeout(r, 400));
-      advanceStep();
-
-      // Call the Python builder (now picks up bull_bear from DB)
       const res = await fetch(`/api/build_core_sheet?jobId=${result.jobId}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -181,27 +160,47 @@ export function Upload() {
         );
         return;
       }
+      const firstBlob = await res.blob();
 
+      // Step 4: Generate Bull/Bear thesis via Claude API (uses stored metrics)
       advanceStep();
-      const blob = await res.blob();
-      setExcelBlob(blob);
-
-      // If we didn't get bull_bear from the response, fetch it from DB
-      if (!bullBear) {
-        try {
-          const csRes = await fetch(`/api/companies/${result.ticker}`);
-          if (csRes.ok) {
-            const csData = await csRes.json();
-            if (csData.bull_bear) {
-              setBullBear(csData.bull_bear);
-            }
+      let bbData: BullBearData | null = null;
+      try {
+        const bbRes = await fetch(`/api/jobs/${result.jobId}/generate-bull-bear`, {
+          method: "POST",
+        });
+        if (bbRes.ok) {
+          const bbJson = await bbRes.json();
+          if (bbJson.bull_bear) {
+            bbData = bbJson.bull_bear as BullBearData;
+            setBullBear(bbData);
           }
-        } catch {
-          // Non-critical
         }
+      } catch {
+        // Bull/bear generation failed, still show Excel without it
       }
 
-      // Update job status in background (don't block the user)
+      // Step 5: Rebuild Excel with bull/bear included
+      advanceStep();
+      if (bbData) {
+        try {
+          const res2 = await fetch(`/api/build_core_sheet?jobId=${result.jobId}`);
+          if (res2.ok) {
+            const finalBlob = await res2.blob();
+            setExcelBlob(finalBlob);
+          } else {
+            setExcelBlob(firstBlob);
+          }
+        } catch {
+          setExcelBlob(firstBlob);
+        }
+      } else {
+        setExcelBlob(firstBlob);
+      }
+
+      advanceStep();
+
+      // Update job status in background
       fetch(`/api/jobs/${result.jobId}/complete`, { method: "POST" }).catch(() => {});
     } catch {
       setBuildError("Network error — could not reach the build API.");

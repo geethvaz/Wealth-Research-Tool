@@ -152,6 +152,136 @@ def fetch_bull_bear(company_id: int) -> dict | None:
     return None
 
 
+def extract_and_store_metrics(
+    sheets: dict,
+    offsets: dict,
+    quarters: list,
+    ttm_cols: dict,
+    company_id: int,
+    company_type: str,
+):
+    """Extract key financial metrics from source sheets and store in core_sheets."""
+    if company_id is None:
+        return
+
+    def _val(ws, row, col):
+        """Get numeric value from a cell, return None if not a number."""
+        if ws is None or row is None:
+            return None
+        v = ws.cell(row=row, column=col).value
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    def _series(ws, label, offset, num_quarters=12):
+        """Extract a series of values for a metric across quarters."""
+        if ws is None:
+            return {}
+        row = find_row(ws, label)
+        if row is None:
+            return {}
+        result = {}
+        for q_idx in range(min(num_quarters, len(quarters))):
+            src_col = (5 + q_idx) + offset
+            val = _val(ws, row, src_col)
+            if val is not None:
+                result[quarters[q_idx] if q_idx < len(quarters) else f"Q{q_idx}"] = val
+        return result
+
+    is_ws = sheets.get("IS")
+    cf_ws = sheets.get("CF")
+    bs_ws = sheets.get("BS")
+    rat_ws = sheets.get("RAT")
+    seg_ws = sheets.get("SEG")
+
+    is_off = offsets.get("IS", 0)
+    cf_off = offsets.get("CF", 0)
+    bs_off = offsets.get("BS", 0)
+    rat_off = offsets.get("RAT", 0)
+    seg_off = offsets.get("SEG", 0)
+
+    income_data = {
+        "revenue": _series(is_ws, "Revenue", is_off),
+        "gross_profit": _series(is_ws, "Gross Profit", is_off),
+        "gross_margin": _series(is_ws, "Gross Margin", is_off),
+        "operating_income": _series(is_ws, "Operating Income", is_off),
+        "operating_margin": _series(is_ws, "Operating Margin", is_off),
+        "ebitda": _series(is_ws, "EBITDA", is_off),
+        "net_income": _series(is_ws, "Net Income", is_off),
+    }
+
+    cash_flow_data = {
+        "ocf": _series(cf_ws, "Operating", cf_off),
+        "fcf": _series(cf_ws, "Free Cash Flow", cf_off),
+        "capex": _series(cf_ws, "Capital Expenditure", cf_off),
+        "sbc": _series(cf_ws, "Stock-Based", cf_off),
+    }
+
+    balance_sheet_data = {
+        "cash": _series(bs_ws, "Cash", bs_off),
+        "total_assets": _series(bs_ws, "Total Assets", bs_off),
+        "total_debt": _series(bs_ws, "Total Debt", bs_off),
+        "equity": _series(bs_ws, "Equity", bs_off),
+    }
+
+    valuation_data = {
+        "pe": _series(rat_ws, "P/E", rat_off),
+        "ev_revenue": _series(rat_ws, "EV/Revenue", rat_off),
+        "ev_ebitda": _series(rat_ws, "EV/EBITDA", rat_off),
+        "roe": _series(rat_ws, "Return on Equity", rat_off),
+        "roic": _series(rat_ws, "Return on Invested Capital", rat_off),
+    }
+
+    # Extract segment labels (first 20 rows of col A from SEG sheet)
+    segments_data = {}
+    if seg_ws:
+        for r in range(1, min(seg_ws.max_row + 1, 40)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if label and label.lower() not in ("", "none"):
+                vals = _series(seg_ws, label, seg_off)
+                if vals:
+                    segments_data[label] = vals
+
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        # Ensure unique index exists (idempotent)
+        cur.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS core_sheets_company_id_unique ON core_sheets(company_id)"
+        )
+        cur.execute(
+            """
+            INSERT INTO core_sheets (company_id, quarters, income_statement, cash_flow,
+                                     balance_sheet, valuation, segments, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (company_id) DO UPDATE SET
+                quarters = EXCLUDED.quarters,
+                income_statement = EXCLUDED.income_statement,
+                cash_flow = EXCLUDED.cash_flow,
+                balance_sheet = EXCLUDED.balance_sheet,
+                valuation = EXCLUDED.valuation,
+                segments = EXCLUDED.segments,
+                updated_at = NOW()
+            """,
+            (
+                company_id,
+                json.dumps(quarters),
+                json.dumps(income_data),
+                json.dumps(cash_flow_data),
+                json.dumps(balance_sheet_data),
+                json.dumps(valuation_data),
+                json.dumps(segments_data),
+            ),
+        )
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
 # ─── Company Type Detection ───────────────────────────────────────────────────
 
 def detect_company_type(sheets: dict) -> str:
@@ -618,10 +748,15 @@ class handler(BaseHTTPRequestHandler):
             offsets, quarters, ttm_cols, ntm_cols = detect_offsets(sheets)
             ticker, company_name, company_id = fetch_company_info(job_id)
 
-            # 3. Fetch bull/bear thesis from DB (if previously generated)
+            # 3. Extract and store financial metrics in core_sheets for Claude
+            extract_and_store_metrics(
+                sheets, offsets, quarters, ttm_cols, company_id, company_type,
+            )
+
+            # 4. Fetch bull/bear thesis from DB (if previously generated)
             bull_bear = fetch_bull_bear(company_id)
 
-            # 4. Build Excel (software template for now; extend for other company types)
+            # 5. Build Excel (software template for now; extend for other company types)
             excel_bytes = build_software_template(
                 sheets, offsets, quarters, ttm_cols, ntm_cols, ticker, company_name,
                 bull_bear=bull_bear,
