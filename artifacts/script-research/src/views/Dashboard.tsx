@@ -1,5 +1,7 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useRouter } from "next/navigation";
 import { Plus, Eye, RefreshCw } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -55,7 +57,7 @@ function TableSkeleton() {
 }
 
 export function Dashboard() {
-  const [, navigate] = useLocation();
+  const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -202,7 +204,7 @@ export function Dashboard() {
                         ? "bg-[#F8FAFC] dark:bg-slate-900/20"
                         : "bg-white dark:bg-transparent"
                     }`}
-                    onClick={() => navigate(`/company/${company.ticker}`)}
+                    onClick={() => router.push(`/company/${company.ticker}`)}
                     data-testid={`row-company-${company.ticker.toLowerCase()}`}
                   >
                     <TableCell className="font-semibold text-slate-900 dark:text-white">
@@ -243,7 +245,7 @@ export function Dashboard() {
                           size="icon"
                           className="h-8 w-8 text-slate-500 hover:text-[#0D9488] hover:bg-teal-50 dark:hover:bg-teal-900/20"
                           title="View Details"
-                          onClick={() => navigate(`/company/${company.ticker}`)}
+                          onClick={() => router.push(`/company/${company.ticker}`)}
                           data-testid={`btn-view-${company.ticker.toLowerCase()}`}
                         >
                           <Eye className="h-4 w-4" />

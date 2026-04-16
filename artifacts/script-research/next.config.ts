@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: [],
@@ -7,6 +8,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "30mb",
     },
+  },
+  // Next.js needs to know the app is inside src/
+  distDir: ".next",
+  webpack: (config) => {
+    config.resolve.alias["@"] = path.resolve(__dirname, "src");
+    return config;
   },
 };
 

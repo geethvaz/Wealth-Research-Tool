@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
-import { Link, useParams } from "wouter";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +30,7 @@ import {
 
 export function CompanyDetail() {
   const params = useParams<{ ticker: string }>();
-  const ticker = params.ticker?.toUpperCase() || "ADBE";
+  const ticker = (params.ticker as string)?.toUpperCase() || "ADBE";
 
   const company = mockCompanies.find((c) => c.ticker === ticker) || mockCompanies[0];
 
