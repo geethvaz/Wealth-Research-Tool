@@ -99,7 +99,12 @@ export async function POST(
 
     let bullBearData: unknown;
     try {
-      bullBearData = JSON.parse(textBlock.text);
+      // Strip markdown code fences if present (```json ... ```)
+      let jsonText = textBlock.text.trim();
+      if (jsonText.startsWith("```")) {
+        jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+      }
+      bullBearData = JSON.parse(jsonText);
     } catch {
       return NextResponse.json(
         { error: "Claude returned invalid JSON", raw: textBlock.text },
