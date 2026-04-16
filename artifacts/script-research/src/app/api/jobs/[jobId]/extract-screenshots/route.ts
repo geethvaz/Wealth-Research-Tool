@@ -58,7 +58,7 @@ export async function POST(
         : "image/jpeg" as const;
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5-20250514",
+        model: "claude-sonnet-4-5",
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages: [
