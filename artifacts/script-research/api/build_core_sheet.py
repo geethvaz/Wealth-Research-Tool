@@ -1005,44 +1005,6 @@ class handler(BaseHTTPRequestHandler):
             offsets, quarters, ttm_cols, ntm_cols = detect_offsets(sheets)
             ticker, company_name, company_id = fetch_company_info(job_id)
 
-            # Debug mode: return diagnostics instead of Excel
-            debug_mode = bool(params.get("debug"))
-            if debug_mode:
-                debug_info = {
-                    "ticker": ticker,
-                    "company_name": company_name,
-                    "company_type": company_type,
-                    "offsets": offsets,
-                    "quarters": quarters,
-                    "sheets_loaded": list(sheets.keys()),
-                }
-                # Test find_row for key metrics
-                is_ws = sheets.get("IS")
-                if is_ws:
-                    test_labels = [
-                        "Interest income", "Net interest income",
-                        "Total noninterest income", "Total revenue",
-                        "Revenue", "Gross Profit", "Operating Profit",
-                    ]
-                    debug_info["find_row_results"] = {}
-                    for lbl in test_labels:
-                        row = find_row(is_ws, lbl)
-                        if row:
-                            cell_a = str(is_ws.cell(row=row, column=1).value or "")
-                            cell_b = is_ws.cell(row=row, column=2).value
-                            debug_info["find_row_results"][lbl] = {
-                                "row": row, "col_a": cell_a,
-                                "col_b_value": str(cell_b) if cell_b else "None",
-                            }
-                        else:
-                            debug_info["find_row_results"][lbl] = None
-                    # Check IS row 8 directly
-                    debug_info["is_row8_a"] = str(is_ws.cell(row=8, column=1).value)
-                    debug_info["is_row8_b"] = str(is_ws.cell(row=8, column=2).value)
-                    debug_info["is_max_row"] = is_ws.max_row
-
-                self._json(200, debug_info)
-                return
 
             # 3. Extract and store financial metrics in core_sheets for Claude
             extract_and_store_metrics(
