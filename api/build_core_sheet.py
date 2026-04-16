@@ -84,8 +84,22 @@ def fetch_sheets(job_id: int) -> dict:
         if key and file_data and key not in sheets:
             try:
                 file_bytes = base64.b64decode(file_data)
+                # Try data_only=True first to get cached values from formulas.
+                # If that yields all-None data, fall back to reading raw values.
                 wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
-                sheets[key] = wb.active
+                ws = wb.active
+
+                # Quick check: if row 2+ col B is all None, the file likely has
+                # formulas without cached values.  Reload without data_only.
+                sample_vals = [
+                    ws.cell(row=r, column=2).value
+                    for r in range(2, min(ws.max_row + 1, 10))
+                ]
+                if all(v is None for v in sample_vals):
+                    wb2 = openpyxl.load_workbook(BytesIO(file_bytes), data_only=False)
+                    ws = wb2.active
+
+                sheets[key] = ws
             except Exception:
                 continue  # skip corrupted files
 
@@ -93,13 +107,13 @@ def fetch_sheets(job_id: int) -> dict:
 
 
 def fetch_company_info(job_id: int) -> tuple:
-    """Return (ticker, company_name) for the given job."""
+    """Return (ticker, company_name, company_id) for the given job."""
     conn = _get_connection()
     try:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT c.ticker, c.name
+            SELECT c.ticker, c.name, c.id
             FROM build_jobs bj
             JOIN companies c ON c.id = bj.company_id
             WHERE bj.id = %s
@@ -112,8 +126,30 @@ def fetch_company_info(job_id: int) -> tuple:
         conn.close()
 
     if row:
-        return row[0], row[1]
-    return "UNKNOWN", "Unknown Company"
+        return row[0], row[1], row[2]
+    return "UNKNOWN", "Unknown Company", None
+
+
+def fetch_bull_bear(company_id: int) -> dict | None:
+    """Return bull_bear JSON from core_sheets if it exists."""
+    if company_id is None:
+        return None
+    conn = _get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT bull_bear FROM core_sheets WHERE company_id = %s LIMIT 1",
+            (company_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
+
+    if row and row[0]:
+        data = row[0]
+        return data if isinstance(data, dict) else json.loads(data)
+    return None
 
 
 # ─── Company Type Detection ───────────────────────────────────────────────────
@@ -287,6 +323,7 @@ def build_software_template(
     ntm_cols: dict,
     ticker: str,
     company_name: str,
+    bull_bear: dict | None = None,
 ) -> bytes:
     wb = openpyxl.Workbook()
 
@@ -509,22 +546,42 @@ def build_software_template(
     # BULL BEAR & TAILWINDS sheet
     # ════════════════════════════════════════════════════════════════════════════
     bb = wb.create_sheet("Bull Bear & Tailwinds")
-    bb_sections = ["Bull Case", "Bear Case", "Key Tailwinds", "Key Risks", "Catalysts"]
-    bb_row = 1
+    bb.column_dimensions["A"].width = 80
 
-    for section_name in bb_sections:
+    # Map JSON keys to display section names
+    bb_section_map = [
+        ("bull_case", "Bull Case"),
+        ("bear_case", "Bear Case"),
+        ("tailwinds", "Key Tailwinds"),
+        ("headwinds", "Key Risks"),
+        ("watchlist_metrics", "Watchlist Metrics"),
+    ]
+
+    bb_row = 1
+    for json_key, section_name in bb_section_map:
         bb.merge_cells(f"A{bb_row}:H{bb_row}")
         hdr = bb[f"A{bb_row}"]
         hdr.value = section_name
         hdr.font = _font(bold=True, color=COLOR_WHITE)
         hdr.fill = _fill(COLOR_BLACK)
         hdr.alignment = _align("left", indent=1)
-        bb.row_dimensions[bb_row].height = 14
+        bb.row_dimensions[bb_row].height = 16
         bb_row += 1
 
-        for _ in range(6):
-            bb.row_dimensions[bb_row].height = 14
-            bb_row += 1
+        items = (bull_bear or {}).get(json_key, [])
+        if items:
+            for i, item in enumerate(items):
+                cell = bb.cell(row=bb_row, column=1, value=f"  {i+1}. {item}")
+                cell.font = _font()
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                row_fill = _fill(COLOR_WHITE if i % 2 == 0 else COLOR_LIGHT_GREY)
+                cell.fill = row_fill
+                bb.row_dimensions[bb_row].height = 28
+                bb_row += 1
+        else:
+            for _ in range(5):
+                bb.row_dimensions[bb_row].height = 14
+                bb_row += 1
 
         bb_row += 1  # gap between sections
 
@@ -559,14 +616,18 @@ class handler(BaseHTTPRequestHandler):
             # 2. Detect company metadata
             company_type = detect_company_type(sheets)
             offsets, quarters, ttm_cols, ntm_cols = detect_offsets(sheets)
-            ticker, company_name = fetch_company_info(job_id)
+            ticker, company_name, company_id = fetch_company_info(job_id)
 
-            # 3. Build Excel (software template for now; extend for other company types)
+            # 3. Fetch bull/bear thesis from DB (if previously generated)
+            bull_bear = fetch_bull_bear(company_id)
+
+            # 4. Build Excel (software template for now; extend for other company types)
             excel_bytes = build_software_template(
-                sheets, offsets, quarters, ttm_cols, ntm_cols, ticker, company_name
+                sheets, offsets, quarters, ttm_cols, ntm_cols, ticker, company_name,
+                bull_bear=bull_bear,
             )
 
-            # 4. Stream response
+            # 5. Stream response
             filename = f"{ticker}_CoreSheet.xlsx"
             self.send_response(200)
             self.send_header(

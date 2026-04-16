@@ -40,10 +40,19 @@ const FILE_LABELS: { key: keyof FilesDetected; label: string }[] = [
 const BUILD_STEPS = [
   "Reading uploaded files…",
   "Detecting company type…",
+  "Generating Bull/Bear thesis (Claude AI)…",
   "Mapping quarterly columns…",
   "Building Core Sheet…",
   "Finalizing Excel file…",
 ];
+
+interface BullBearData {
+  bull_case?: string[];
+  bear_case?: string[];
+  tailwinds?: string[];
+  headwinds?: string[];
+  watchlist_metrics?: string[];
+}
 
 export function Upload() {
   const [isDragging, setIsDragging] = useState(false);
@@ -58,6 +67,7 @@ export function Upload() {
   const [buildStep, setBuildStep] = useState(BUILD_STEPS[0]);
   const [excelBlob, setExcelBlob] = useState<Blob | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [bullBear, setBullBear] = useState<BullBearData | null>(null);
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
@@ -124,18 +134,45 @@ export function Upload() {
     setIsBuilding(true);
     setBuildError(null);
     setExcelBlob(null);
+    setBullBear(null);
 
     let stepIdx = 0;
     setBuildStep(BUILD_STEPS[0]);
-    const interval = setInterval(() => {
+    const advanceStep = () => {
       stepIdx = Math.min(stepIdx + 1, BUILD_STEPS.length - 1);
       setBuildStep(BUILD_STEPS[stepIdx]);
-    }, 1800);
+    };
 
     try {
-      // Call the Python builder directly (avoids Vercel's server-to-server auth issue)
+      // Step 1-2: Reading files, detecting type
+      advanceStep();
+      await new Promise((r) => setTimeout(r, 600));
+
+      // Step 3: Generate Bull/Bear thesis via Claude API
+      advanceStep();
+      try {
+        const bbRes = await fetch(`/api/jobs/${result.jobId}/generate-bull-bear`, {
+          method: "POST",
+        });
+        if (bbRes.ok) {
+          // Fetch the generated thesis to display
+          const bbData = await bbRes.json();
+          if (bbData.bull_bear) {
+            setBullBear(bbData.bull_bear);
+          }
+        }
+        // Non-fatal if bull/bear fails — continue with build
+      } catch {
+        // Bull/bear generation failed, continue anyway
+      }
+
+      // Step 4-5: Map columns, build Excel
+      advanceStep();
+      await new Promise((r) => setTimeout(r, 400));
+      advanceStep();
+
+      // Call the Python builder (now picks up bull_bear from DB)
       const res = await fetch(`/api/build_core_sheet?jobId=${result.jobId}`);
-      clearInterval(interval);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setBuildError(
@@ -144,16 +181,31 @@ export function Upload() {
         );
         return;
       }
+
+      advanceStep();
       const blob = await res.blob();
       setExcelBlob(blob);
+
+      // If we didn't get bull_bear from the response, fetch it from DB
+      if (!bullBear) {
+        try {
+          const csRes = await fetch(`/api/companies/${result.ticker}`);
+          if (csRes.ok) {
+            const csData = await csRes.json();
+            if (csData.bull_bear) {
+              setBullBear(csData.bull_bear);
+            }
+          }
+        } catch {
+          // Non-critical
+        }
+      }
 
       // Update job status in background (don't block the user)
       fetch(`/api/jobs/${result.jobId}/complete`, { method: "POST" }).catch(() => {});
     } catch {
-      clearInterval(interval);
       setBuildError("Network error — could not reach the build API.");
     } finally {
-      clearInterval(interval);
       setIsBuilding(false);
     }
   }
@@ -357,6 +409,97 @@ export function Upload() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Bull/Bear Analysis Display */}
+              {bullBear && (
+                <Card className="rounded-xl border border-slate-200 dark:border-slate-700/50 shadow-sm mt-6">
+                  <CardContent className="p-6">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
+                      Investment Thesis — {result.ticker}
+                    </h2>
+
+                    {bullBear.bull_case && bullBear.bull_case.length > 0 && (
+                      <div className="mb-5">
+                        <h3 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mb-2">
+                          Bull Case
+                        </h3>
+                        <ul className="space-y-1.5">
+                          {bullBear.bull_case.map((item, i) => (
+                            <li key={i} className="text-sm text-slate-700 dark:text-slate-300 flex gap-2">
+                              <span className="text-emerald-500 shrink-0">+</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {bullBear.bear_case && bullBear.bear_case.length > 0 && (
+                      <div className="mb-5">
+                        <h3 className="text-sm font-semibold text-red-500 dark:text-red-400 uppercase tracking-wide mb-2">
+                          Bear Case
+                        </h3>
+                        <ul className="space-y-1.5">
+                          {bullBear.bear_case.map((item, i) => (
+                            <li key={i} className="text-sm text-slate-700 dark:text-slate-300 flex gap-2">
+                              <span className="text-red-500 shrink-0">−</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {bullBear.tailwinds && bullBear.tailwinds.length > 0 && (
+                      <div className="mb-5">
+                        <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-2">
+                          Key Tailwinds
+                        </h3>
+                        <ul className="space-y-1.5">
+                          {bullBear.tailwinds.map((item, i) => (
+                            <li key={i} className="text-sm text-slate-700 dark:text-slate-300 flex gap-2">
+                              <span className="text-blue-500 shrink-0">&#8599;</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {bullBear.headwinds && bullBear.headwinds.length > 0 && (
+                      <div className="mb-5">
+                        <h3 className="text-sm font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-2">
+                          Key Risks
+                        </h3>
+                        <ul className="space-y-1.5">
+                          {bullBear.headwinds.map((item, i) => (
+                            <li key={i} className="text-sm text-slate-700 dark:text-slate-300 flex gap-2">
+                              <span className="text-amber-500 shrink-0">!</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {bullBear.watchlist_metrics && bullBear.watchlist_metrics.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">
+                          Watchlist Metrics
+                        </h3>
+                        <ul className="space-y-1.5">
+                          {bullBear.watchlist_metrics.map((item, i) => (
+                            <li key={i} className="text-sm text-slate-700 dark:text-slate-300 flex gap-2">
+                              <span className="text-slate-400 shrink-0">&bull;</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>

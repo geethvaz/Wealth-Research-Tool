@@ -114,6 +114,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       ticker: company.ticker,
+      bull_bear: bullBearData,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
