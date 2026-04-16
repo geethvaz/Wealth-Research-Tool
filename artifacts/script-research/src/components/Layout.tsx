@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   TrendingUp,
   LayoutDashboard,
+  BarChart3,
   CloudUpload,
   Settings,
   Moon,
@@ -40,6 +41,7 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Upload", href: "/upload", icon: CloudUpload },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
