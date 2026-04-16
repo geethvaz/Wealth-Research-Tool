@@ -1,4 +1,6 @@
 {
+  "framework": "nextjs",
+  "outputDirectory": ".next",
   "functions": {
     "api/build_core_sheet.py": {
       "maxDuration": 60,
