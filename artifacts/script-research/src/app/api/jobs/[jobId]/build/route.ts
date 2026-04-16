@@ -22,22 +22,35 @@ export async function POST(
     .where(eq(buildJobsTable.id, jobIdNum));
 
   try {
+    // Use VERCEL_URL for the Python function call.
+    // Add bypass header if Deployment Protection is enabled.
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 
     const pythonUrl = `${baseUrl}/api/build_core_sheet?jobId=${jobIdNum}`;
 
+    const headers: Record<string, string> = {};
+    // Bypass Vercel Deployment Protection for server-to-server calls
+    if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+      headers["x-vercel-protection-bypass"] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    }
+
     const pythonRes = await fetch(pythonUrl, {
+      headers,
       signal: AbortSignal.timeout(55_000),
     });
 
     if (!pythonRes.ok) {
-      const errBody = await pythonRes.json().catch(() => ({}));
-      throw new Error(
-        (errBody as { error?: string }).error ??
-          `Python build failed: ${pythonRes.status}`,
-      );
+      const errText = await pythonRes.text().catch(() => "");
+      let errMsg: string;
+      try {
+        const errJson = JSON.parse(errText);
+        errMsg = errJson.error ?? `Python build failed: ${pythonRes.status}`;
+      } catch {
+        errMsg = `Python build failed: ${pythonRes.status}${errText ? ` — ${errText.slice(0, 200)}` : ""}`;
+      }
+      throw new Error(errMsg);
     }
 
     const excelBuffer = await pythonRes.arrayBuffer();
