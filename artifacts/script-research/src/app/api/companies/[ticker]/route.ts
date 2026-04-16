@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { getDb, companiesTable } from "@/lib/db";
+import { getDb, companiesTable, coreSheetsTable } from "@/lib/db";
 
 export async function GET(
   _req: Request,
@@ -17,7 +17,14 @@ export async function GET(
     if (!company) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
-    return NextResponse.json(company);
+
+    const [coreSheet] = await db
+      .select()
+      .from(coreSheetsTable)
+      .where(eq(coreSheetsTable.company_id, company.id))
+      .limit(1);
+
+    return NextResponse.json({ ...company, core_sheet: coreSheet || null });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

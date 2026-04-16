@@ -6,6 +6,7 @@ import {
   text,
   integer,
   boolean,
+  jsonb,
   timestamp,
   pgEnum,
 } from "drizzle-orm/pg-core";
@@ -55,6 +56,21 @@ export const uploadedFilesTable = pgTable("uploaded_files", {
   file_data: text("file_data"),
   is_screenshot: boolean("is_screenshot").notNull().default(false),
   created_at: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const coreSheetsTable = pgTable("core_sheets", {
+  id: serial("id").primaryKey(),
+  company_id: integer("company_id").notNull(),
+  quarters: jsonb("quarters"),
+  income_statement: jsonb("income_statement"),
+  cash_flow: jsonb("cash_flow"),
+  balance_sheet: jsonb("balance_sheet"),
+  valuation: jsonb("valuation"),
+  segments: jsonb("segments"),
+  bull_bear: jsonb("bull_bear"),
+  screenshot_data: jsonb("screenshot_data"),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // ─── Database connection ────────────────────────────────────────────────────

@@ -85,22 +85,12 @@ export async function POST() {
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS core_sheets_company_id_unique ON core_sheets(company_id)`;
     log.push("unique index on core_sheets.company_id ensured");
 
-    // Seed companies
-    const seedData = [
-      { ticker: "ADBE", name: "Adobe Inc.", exchange: "NasdaqGS", type: "software", status: "current" as const },
-      { ticker: "JPM", name: "JPMorgan Chase", exchange: "NYSE", type: "banking", status: "current" as const },
-      { ticker: "SPGI", name: "S&P Global", exchange: "NYSE", type: "financials", status: "current" as const },
-      { ticker: "PLTR", name: "Palantir Technologies", exchange: "NasdaqGS", type: "software", status: "needs_update" as const },
-      { ticker: "C", name: "Citigroup", exchange: "NYSE", type: "banking", status: "current" as const },
-      { ticker: "SEHK-700", name: "Tencent Holdings", exchange: "SEHK", type: "internet", status: "needs_update" as const },
-    ];
+    // No seed data — companies are created via the upload flow
+    log.push("tables ready (no seed data)");
 
-    for (const c of seedData) {
-      await sql`INSERT INTO companies (ticker, name, exchange, company_type, status, last_updated)
-        VALUES (${c.ticker}, ${c.name}, ${c.exchange}, ${c.type}, ${c.status}, NOW())
-        ON CONFLICT (ticker) DO NOTHING`;
-    }
-    log.push("seeded 6 companies");
+    // Clean up seeded companies that have no build jobs (never had files uploaded)
+    await sql`DELETE FROM companies WHERE id NOT IN (SELECT DISTINCT company_id FROM build_jobs)`;
+    log.push("removed companies with no uploaded data");
 
     // Verify
     const tables = await sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`;
