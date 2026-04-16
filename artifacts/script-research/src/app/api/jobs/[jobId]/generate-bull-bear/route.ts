@@ -4,7 +4,7 @@ import { neon } from "@neondatabase/serverless";
 import { getDb, companiesTable, buildJobsTable } from "@/lib/db";
 import { getAnthropicClient } from "@/lib/anthropic";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const SYSTEM_PROMPT = `You are a senior equity research analyst at a top-tier wealth management firm. You have access to the company's actual quarterly financial data. Analyze the data carefully and generate a specific, data-driven investment thesis.
 
