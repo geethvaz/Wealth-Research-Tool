@@ -231,12 +231,10 @@ export async function POST(req: Request) {
 
   for (const file of fileEntries) {
     const fileType = detectFileType(file.name);
-    if (!fileType || fileType === "segments") {
-      // treat "segments" detection as segments_kpis for the checklist
-    }
-
-    const mappedType = fileType ?? "income_statement"; // fallback — still stored
     if (fileType) filesDetected[fileType] = true;
+
+    // Skip files we can't identify — don't silently store them as wrong type
+    if (!fileType) continue;
 
     // Read bytes and encode as base64
     const arrayBuffer = await file.arrayBuffer();
@@ -244,7 +242,7 @@ export async function POST(req: Request) {
 
     await db.insert(uploadedFilesTable).values({
       job_id: job.id,
-      file_type: mappedType === "segments" ? "segments" : (mappedType as typeof fileTypeEnum.enumValues[number]),
+      file_type: fileType,
       original_filename: file.name,
       file_data: base64,
       is_screenshot: false,

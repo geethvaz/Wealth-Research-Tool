@@ -48,7 +48,11 @@ export async function POST(
     return NextResponse.json({ error: "Invalid jobId" }, { status: 400 });
   }
 
-  const sql = neon(process.env.DATABASE_URL!);
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "DATABASE_URL not set" }, { status: 500 });
+  }
+
+  const sql = neon(process.env.DATABASE_URL);
   const db = drizzle(sql);
 
   // Mark job as processing

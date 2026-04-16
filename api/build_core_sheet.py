@@ -41,12 +41,20 @@ FMT_RATIO = '0.0"x"'
 
 # ─── Database Fetcher ─────────────────────────────────────────────────────────
 
+def _get_connection():
+    """Get a database connection with proper error handling."""
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable is not set")
+    return psycopg2.connect(db_url)
+
+
 def fetch_sheets(job_id: int) -> dict:
     """
     Load all uploaded xlsx files for a job from the database.
     Returns a dict mapping sheet key ('IS','CF','BS','RAT','SEG') to openpyxl Worksheet.
     """
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    conn = _get_connection()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -58,6 +66,7 @@ def fetch_sheets(job_id: int) -> dict:
             (job_id,),
         )
         rows = cur.fetchall()
+        cur.close()
     finally:
         conn.close()
 
@@ -72,17 +81,20 @@ def fetch_sheets(job_id: int) -> dict:
     sheets: dict = {}
     for file_type, file_data in rows:
         key = type_map.get(file_type)
-        if key and file_data:
-            file_bytes = base64.b64decode(file_data)
-            wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
-            sheets[key] = wb.active
+        if key and file_data and key not in sheets:
+            try:
+                file_bytes = base64.b64decode(file_data)
+                wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
+                sheets[key] = wb.active
+            except Exception:
+                continue  # skip corrupted files
 
     return sheets
 
 
 def fetch_company_info(job_id: int) -> tuple:
     """Return (ticker, company_name) for the given job."""
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    conn = _get_connection()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -95,6 +107,7 @@ def fetch_company_info(job_id: int) -> tuple:
             (job_id,),
         )
         row = cur.fetchone()
+        cur.close()
     finally:
         conn.close()
 
