@@ -1,41 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
-import {
-  pgTable,
-  serial,
-  integer,
-  text,
-  timestamp,
-  pgEnum,
-} from "drizzle-orm/pg-core";
-
-// ─── Inline schema ────────────────────────────────────────────────────────────
-
-const companyStatusEnum = pgEnum("company_status", ["current", "needs_update"]);
-const jobStatusEnum = pgEnum("job_status", [
-  "pending",
-  "processing",
-  "complete",
-  "failed",
-]);
-
-const companiesTable = pgTable("companies", {
-  id: serial("id").primaryKey(),
-  ticker: text("ticker").notNull(),
-  status: companyStatusEnum("status").notNull(),
-});
-
-const buildJobsTable = pgTable("build_jobs", {
-  id: serial("id").primaryKey(),
-  company_id: integer("company_id").notNull(),
-  status: jobStatusEnum("status").notNull(),
-  error_message: text("error_message"),
-  completed_at: timestamp("completed_at"),
-});
-
-// ─── Route handler ────────────────────────────────────────────────────────────
+import { getDb, companiesTable, buildJobsTable } from "@/lib/db";
 
 export async function POST(
   _req: NextRequest,
@@ -48,12 +13,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid jobId" }, { status: 400 });
   }
 
-  if (!process.env.DATABASE_URL) {
-    return NextResponse.json({ error: "DATABASE_URL not set" }, { status: 500 });
-  }
-
-  const sql = neon(process.env.DATABASE_URL);
-  const db = drizzle(sql);
+  const db = getDb();
 
   // Mark job as processing
   await db
@@ -62,9 +22,6 @@ export async function POST(
     .where(eq(buildJobsTable.id, jobIdNum));
 
   try {
-    // Resolve the Python function URL.
-    // On Vercel: VERCEL_URL is set automatically (no protocol).
-    // Locally: fall back to localhost.
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
@@ -72,7 +29,6 @@ export async function POST(
     const pythonUrl = `${baseUrl}/api/build_core_sheet?jobId=${jobIdNum}`;
 
     const pythonRes = await fetch(pythonUrl, {
-      // Give the Python function up to 55 s (Vercel limit is 60 s on Pro)
       signal: AbortSignal.timeout(55_000),
     });
 
@@ -92,7 +48,7 @@ export async function POST(
       .set({ status: "complete", completed_at: new Date() })
       .where(eq(buildJobsTable.id, jobIdNum));
 
-    // Update company status → current
+    // Update company status
     const jobs = await db
       .select({ company_id: buildJobsTable.company_id })
       .from(buildJobsTable)
@@ -105,7 +61,6 @@ export async function POST(
         .where(eq(companiesTable.id, jobs[0].company_id));
     }
 
-    // Stream the Excel file back to the client
     return new NextResponse(excelBuffer, {
       status: 200,
       headers: {
