@@ -28,8 +28,19 @@ entire workflow: upload files, auto-detect everything, build Excel, download/syn
 
 ## DO NOT USE
 - Replit-native integrations (ReplDB, Object Storage, Replit Auth, Replit Deployments)
+- Replit branding, comments, or references in code (no @replit comments, no Replit favicon)
 - Wouter or any client-side router (use Next.js App Router)
 - Vite as build system (use Next.js `next build`)
+
+## Deployment Verification (ALWAYS DO THIS AFTER PUSHING)
+After every `git push`, verify the Vercel deployment succeeded:
+```
+curl -s "https://api.github.com/repos/geethvaz/Wealth-Research-Tool/commits/<SHA>/statuses" | \
+  node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); \
+  const s=d.find(x=>x.state==='success'); \
+  console.log(s ? 'DEPLOYED: '+s.target_url : 'PENDING or FAILED')"
+```
+The user does NOT want to check Vercel manually. Always confirm deployment status before giving the go-ahead.
 
 ## Environment Variables (in Vercel + .env.local)
 - `DATABASE_URL` — Neon PostgreSQL connection string
