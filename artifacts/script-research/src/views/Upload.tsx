@@ -133,9 +133,8 @@ export function Upload() {
     }, 1800);
 
     try {
-      const res = await fetch(`/api/jobs/${result.jobId}/build`, {
-        method: "POST",
-      });
+      // Call the Python builder directly (avoids Vercel's server-to-server auth issue)
+      const res = await fetch(`/api/build_core_sheet?jobId=${result.jobId}`);
       clearInterval(interval);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
