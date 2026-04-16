@@ -39,8 +39,7 @@ export function Layout({ children }: LayoutProps) {
   }, [isDarkMode]);
 
   const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Watchlist", href: "/", icon: TrendingUp },
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Upload", href: "/upload", icon: CloudUpload },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
