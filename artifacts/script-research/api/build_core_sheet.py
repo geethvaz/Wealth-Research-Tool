@@ -537,59 +537,65 @@ def build_software_template(
         cs.row_dimensions[r].height = 14
         current_row[0] += 1
 
+    def _read_val(ws, row, col):
+        """Read a cell value, resolving to a number or None."""
+        v = ws.cell(row=row, column=col).value
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return v
+        if isinstance(v, str) and v.startswith("="):
+            return None  # formula without cached value
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
     def data_row(label: str, src_key: str, src_label: str, number_format: str = FMT_NUMBER):
         r = current_row[0]
         row_fill = _fill(COLOR_WHITE if (r - 3) % 2 == 0 else COLOR_LIGHT_GREY)
 
-        # Col A: label
         a = cs.cell(row=r, column=1, value=label)
         a.font = _font()
         a.fill = row_fill
-
-        # Fill empty cols B, D with row color
         for empty_col in [2, 4]:
-            ec = cs.cell(row=r, column=empty_col)
-            ec.fill = row_fill
+            cs.cell(row=r, column=empty_col).fill = row_fill
 
         src_ws = sheets.get(src_key)
         src_row = find_row(src_ws, src_label) if src_ws else None
 
-        def make_formula(src_col_1indexed: int) -> str:
-            col_letter = get_column_letter(src_col_1indexed)
-            return f"={src_key}!{col_letter}{src_row}"
-
-        def make_iferror_formula(src_col_1indexed: int) -> str:
-            col_letter = get_column_letter(src_col_1indexed)
-            return f'=IFERROR({src_key}!{col_letter}{src_row},"")'
-
-        # Col C: TTM
-        c_ttm = cs.cell(row=r, column=3)
-        c_ttm.fill = row_fill
-        if src_row and src_ws:
-            ttm_c = ttm_cols.get(src_key)
-            if ttm_c:
-                c_ttm.value = make_formula(ttm_c)
-            else:
-                # Compute TTM as sum of last 4 quarters
-                offset = offsets.get(src_key, 0)
-                cols_for_ttm = [get_column_letter(5 + 8 + offset + i) for i in range(4)]
-                c_ttm.value = f"=SUM({src_key}!{cols_for_ttm[0]}{src_row}:{src_key}!{cols_for_ttm[3]}{src_row})"
-            c_ttm.font = _font(color=COLOR_GREEN)
-            c_ttm.number_format = number_format
-            c_ttm.alignment = _align("right")
-
-        # Cols E–P: 12 quarters
         offset = offsets.get(src_key, 0)
+        vals = []
+
+        # Cols E–P: 12 quarters — write actual values
         for q_idx in range(12):
             col = 5 + q_idx
             src_col = (5 + q_idx) + offset
             cell = cs.cell(row=r, column=col)
             cell.fill = row_fill
             if src_row and src_ws:
-                cell.value = make_formula(src_col)
-                cell.font = _font(color=COLOR_GREEN)
-                cell.number_format = number_format
-                cell.alignment = _align("right")
+                val = _read_val(src_ws, src_row, src_col)
+                if val is not None:
+                    cell.value = val
+                    cell.font = _font()
+                    cell.number_format = number_format
+                    cell.alignment = _align("right")
+                    vals.append(val)
+
+        # Col C: TTM (sum of last 4 quarters from the values we just wrote)
+        c_ttm = cs.cell(row=r, column=3)
+        c_ttm.fill = row_fill
+        if src_row and src_ws:
+            ttm_c = ttm_cols.get(src_key)
+            if ttm_c:
+                ttm_val = _read_val(src_ws, src_row, ttm_c)
+                if ttm_val is not None:
+                    c_ttm.value = ttm_val
+            elif len(vals) >= 4:
+                c_ttm.value = sum(vals[-4:])
+            c_ttm.font = _font()
+            c_ttm.number_format = number_format
+            c_ttm.alignment = _align("right")
 
         # Col Q: Fwd NTM
         c_ntm = cs.cell(row=r, column=17)
@@ -597,12 +603,15 @@ def build_software_template(
         if src_row and src_ws:
             ntm_c = ntm_cols.get(src_key)
             if ntm_c:
-                c_ntm.value = make_iferror_formula(ntm_c)
+                ntm_val = _read_val(src_ws, src_row, ntm_c)
+                if ntm_val is not None:
+                    c_ntm.value = ntm_val
             else:
-                # One column after the last quarter
                 ntm_src_col = (5 + 12) + offset
-                c_ntm.value = make_iferror_formula(ntm_src_col)
-            c_ntm.font = _font(color=COLOR_GREEN)
+                ntm_val = _read_val(src_ws, src_row, ntm_src_col)
+                if ntm_val is not None:
+                    c_ntm.value = ntm_val
+            c_ntm.font = _font()
             c_ntm.number_format = number_format
             c_ntm.alignment = _align("right")
 
@@ -809,6 +818,19 @@ def build_banking_template(
         cs.row_dimensions[r].height = 14
         current_row[0] += 1
 
+    def _read_val_b(ws, row, col):
+        v = ws.cell(row=row, column=col).value
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return v
+        if isinstance(v, str) and v.startswith("="):
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
     def data_row(label, src_key, src_label, number_format=FMT_NUMBER):
         r = current_row[0]
         row_fill = _fill(COLOR_WHITE if (r - 3) % 2 == 0 else COLOR_LIGHT_GREY)
@@ -820,40 +842,58 @@ def build_banking_template(
 
         src_ws = sheets.get(src_key)
         src_row = find_row(src_ws, src_label) if src_ws else None
-
         offset = offsets.get(src_key, 0)
+        vals = []
+
+        # 12 quarters — write actual values
+        for q_idx in range(12):
+            col = 5 + q_idx
+            src_col = (5 + q_idx) + offset
+            cell = cs.cell(row=r, column=col)
+            cell.fill = row_fill
+            if src_row and src_ws:
+                val = _read_val_b(src_ws, src_row, src_col)
+                if val is not None:
+                    cell.value = val
+                    cell.font = _font()
+                    cell.number_format = number_format
+                    cell.alignment = _align("right")
+                    vals.append(val)
+
+        # TTM
+        c_ttm = cs.cell(row=r, column=3)
+        c_ttm.fill = row_fill
         if src_row and src_ws:
-            # TTM
-            c_ttm = cs.cell(row=r, column=3)
-            c_ttm.fill = row_fill
             ttm_c = ttm_cols.get(src_key)
             if ttm_c:
-                c_ttm.value = f"={src_key}!{get_column_letter(ttm_c)}{src_row}"
-            c_ttm.font = _font(color=COLOR_GREEN)
+                ttm_val = _read_val_b(src_ws, src_row, ttm_c)
+                if ttm_val is not None:
+                    c_ttm.value = ttm_val
+            elif len(vals) >= 4:
+                c_ttm.value = sum(vals[-4:])
+            c_ttm.font = _font()
             c_ttm.number_format = number_format
             c_ttm.alignment = _align("right")
 
-            # 12 quarters
-            for q_idx in range(12):
-                col = 5 + q_idx
-                src_col = (5 + q_idx) + offset
-                cell = cs.cell(row=r, column=col)
-                cell.fill = row_fill
-                cell.value = f"={src_key}!{get_column_letter(src_col)}{src_row}"
-                cell.font = _font(color=COLOR_GREEN)
-                cell.number_format = number_format
-                cell.alignment = _align("right")
-
-            # NTM
-            c_ntm = cs.cell(row=r, column=17)
-            c_ntm.fill = row_fill
+        # NTM
+        c_ntm = cs.cell(row=r, column=17)
+        c_ntm.fill = row_fill
+        if src_row and src_ws:
             ntm_c = ntm_cols.get(src_key)
             if ntm_c:
-                c_ntm.value = f'=IFERROR({src_key}!{get_column_letter(ntm_c)}{src_row},"")'
-            c_ntm.font = _font(color=COLOR_GREEN)
+                ntm_val = _read_val_b(src_ws, src_row, ntm_c)
+                if ntm_val is not None:
+                    c_ntm.value = ntm_val
+            else:
+                ntm_src_col = (5 + 12) + offset
+                ntm_val = _read_val_b(src_ws, src_row, ntm_src_col)
+                if ntm_val is not None:
+                    c_ntm.value = ntm_val
+            c_ntm.font = _font()
             c_ntm.number_format = number_format
             c_ntm.alignment = _align("right")
-        else:
+
+        if not (src_row and src_ws):
             for col in [3] + list(range(5, 18)):
                 cs.cell(row=r, column=col).fill = row_fill
 
