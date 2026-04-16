@@ -81,6 +81,10 @@ export async function POST() {
     )`;
     log.push("table core_sheets created");
 
+    // Add unique constraint on core_sheets.company_id if not exists
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS core_sheets_company_id_unique ON core_sheets(company_id)`;
+    log.push("unique index on core_sheets.company_id ensured");
+
     // Seed companies
     const seedData = [
       { ticker: "ADBE", name: "Adobe Inc.", exchange: "NasdaqGS", type: "software", status: "current" as const },
