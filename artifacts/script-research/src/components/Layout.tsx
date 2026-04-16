@@ -1,8 +1,5 @@
-"use client";
-
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "wouter";
 import {
   TrendingUp,
   LayoutDashboard,
@@ -19,7 +16,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const location = usePathname();
+  const [location] = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("theme") === "dark";

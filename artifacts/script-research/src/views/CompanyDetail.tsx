@@ -1,8 +1,5 @@
-"use client";
-
 import React from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { Link, useParams } from "wouter";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
