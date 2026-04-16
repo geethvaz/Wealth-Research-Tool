@@ -6,6 +6,8 @@ maps quarterly offsets, and generates a formatted Excel workbook.
 Usage: GET /api/build_core_sheet?jobId=<id>
 """
 
+from __future__ import annotations
+
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import json
@@ -203,15 +205,27 @@ def extract_and_store_metrics(
     rat_off = offsets.get("RAT", 0)
     seg_off = offsets.get("SEG", 0)
 
-    income_data = {
-        "revenue": _series(is_ws, "Revenue", is_off),
-        "gross_profit": _series(is_ws, "Gross Profit", is_off),
-        "gross_margin": _series(is_ws, "Gross Margin", is_off),
-        "operating_income": _series(is_ws, "Operating Income", is_off),
-        "operating_margin": _series(is_ws, "Operating Margin", is_off),
-        "ebitda": _series(is_ws, "EBITDA", is_off),
-        "net_income": _series(is_ws, "Net Income", is_off),
-    }
+    if company_type == "banking":
+        income_data = {
+            "net_interest_income": _series(is_ws, "Net Interest Income", is_off),
+            "noninterest_revenue": _series(is_ws, "Noninterest Revenue", is_off),
+            "total_revenue": _series(is_ws, "Total Revenue|Total Net Revenue|Net Revenue", is_off),
+            "provision_credit_losses": _series(is_ws, "Provision for Credit Losses", is_off),
+            "noninterest_expense": _series(is_ws, "Noninterest Expense|Total Noninterest", is_off),
+            "net_income": _series(is_ws, "Net Income", is_off),
+            "efficiency_ratio": _series(is_ws, "Efficiency Ratio", is_off),
+            "diluted_eps": _series(is_ws, "Diluted EPS", is_off),
+        }
+    else:
+        income_data = {
+            "revenue": _series(is_ws, "Revenue", is_off),
+            "gross_profit": _series(is_ws, "Gross Profit", is_off),
+            "gross_margin": _series(is_ws, "Gross Margin", is_off),
+            "operating_income": _series(is_ws, "Operating Income", is_off),
+            "operating_margin": _series(is_ws, "Operating Margin", is_off),
+            "ebitda": _series(is_ws, "EBITDA", is_off),
+            "net_income": _series(is_ws, "Net Income", is_off),
+        }
 
     cash_flow_data = {
         "ocf": _series(cf_ws, "Operating", cf_off),
@@ -220,20 +234,35 @@ def extract_and_store_metrics(
         "sbc": _series(cf_ws, "Stock-Based", cf_off),
     }
 
-    balance_sheet_data = {
-        "cash": _series(bs_ws, "Cash", bs_off),
-        "total_assets": _series(bs_ws, "Total Assets", bs_off),
-        "total_debt": _series(bs_ws, "Total Debt", bs_off),
-        "equity": _series(bs_ws, "Equity", bs_off),
-    }
-
-    valuation_data = {
-        "pe": _series(rat_ws, "P/E", rat_off),
-        "ev_revenue": _series(rat_ws, "EV/Revenue", rat_off),
-        "ev_ebitda": _series(rat_ws, "EV/EBITDA", rat_off),
-        "roe": _series(rat_ws, "Return on Equity", rat_off),
-        "roic": _series(rat_ws, "Return on Invested Capital", rat_off),
-    }
+    if company_type == "banking":
+        balance_sheet_data = {
+            "total_assets": _series(bs_ws, "Total Assets", bs_off),
+            "total_loans": _series(bs_ws, "Total Loans|Net Loans", bs_off),
+            "total_deposits": _series(bs_ws, "Total Deposits|Deposits", bs_off),
+            "equity": _series(bs_ws, "Equity", bs_off),
+            "tangible_book_value": _series(bs_ws, "Tangible Book Value", bs_off),
+        }
+        valuation_data = {
+            "pe": _series(rat_ws, "P/E", rat_off),
+            "pb": _series(rat_ws, "P/B", rat_off),
+            "ptbv": _series(rat_ws, "P/TBV|Price/Tangible", rat_off),
+            "roe": _series(rat_ws, "Return on Equity", rat_off),
+            "roa": _series(rat_ws, "Return on Assets", rat_off),
+        }
+    else:
+        balance_sheet_data = {
+            "cash": _series(bs_ws, "Cash", bs_off),
+            "total_assets": _series(bs_ws, "Total Assets", bs_off),
+            "total_debt": _series(bs_ws, "Total Debt", bs_off),
+            "equity": _series(bs_ws, "Equity", bs_off),
+        }
+        valuation_data = {
+            "pe": _series(rat_ws, "P/E", rat_off),
+            "ev_revenue": _series(rat_ws, "EV/Revenue", rat_off),
+            "ev_ebitda": _series(rat_ws, "EV/EBITDA", rat_off),
+            "roe": _series(rat_ws, "Return on Equity", rat_off),
+            "roic": _series(rat_ws, "Return on Invested Capital", rat_off),
+        }
 
     # Extract segment labels (first 20 rows of col A from SEG sheet)
     segments_data = {}
@@ -408,13 +437,25 @@ def detect_offsets(sheets: dict) -> tuple:
 # ─── Row Finder ───────────────────────────────────────────────────────────────
 
 def find_row(ws, search_str: str, col: int = 1) -> int | None:
-    """Scan a column for a case-insensitive partial match. Returns 1-based row."""
-    needle = search_str.lower()
+    """Scan a column for a case-insensitive partial match. Returns 1-based row.
+    Supports pipe-separated alternatives (e.g. 'Revenue|Total Revenues').
+    Prefers rows with actual data in col B over formula-only parent rows."""
+    needles = [n.strip().lower() for n in search_str.split("|")]
+    candidates = []
     for row in range(1, ws.max_row + 1):
         val = str(ws.cell(row=row, column=col).value or "").lower()
-        if needle in val:
-            return row
-    return None
+        for needle in needles:
+            if needle in val:
+                candidates.append(row)
+                break
+    if not candidates:
+        return None
+    # Prefer rows that have data in col B (actual data vs parent/header rows)
+    for r in candidates:
+        v = ws.cell(row=r, column=2).value
+        if v is not None:
+            return r
+    return candidates[0]
 
 
 # ─── Sheet Copier ─────────────────────────────────────────────────────────────
@@ -441,6 +482,50 @@ def _fill(hex_color: str) -> PatternFill:
 
 def _align(horizontal: str = "left", indent: int = 0) -> Alignment:
     return Alignment(horizontal=horizontal, vertical="center", indent=indent)
+
+
+# ─── Bull Bear Sheet Builder (shared) ────────────────────────────────────────
+
+def _build_bull_bear_sheet(wb: openpyxl.Workbook, bull_bear: dict | None):
+    """Add a 'Bull Bear & Tailwinds' sheet to the workbook."""
+    bb = wb.create_sheet("Bull Bear & Tailwinds")
+    bb.column_dimensions["A"].width = 80
+
+    bb_section_map = [
+        ("bull_case", "Bull Case"),
+        ("bear_case", "Bear Case"),
+        ("tailwinds", "Key Tailwinds"),
+        ("headwinds", "Key Risks"),
+        ("watchlist_metrics", "Watchlist Metrics"),
+    ]
+
+    bb_row = 1
+    for json_key, section_name in bb_section_map:
+        bb.merge_cells(f"A{bb_row}:H{bb_row}")
+        hdr = bb[f"A{bb_row}"]
+        hdr.value = section_name
+        hdr.font = _font(bold=True, color=COLOR_WHITE)
+        hdr.fill = _fill(COLOR_BLACK)
+        hdr.alignment = _align("left", indent=1)
+        bb.row_dimensions[bb_row].height = 16
+        bb_row += 1
+
+        items = (bull_bear or {}).get(json_key, [])
+        if items:
+            for i, item in enumerate(items):
+                cell = bb.cell(row=bb_row, column=1, value=f"  {i+1}. {item}")
+                cell.font = _font()
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                row_fill = _fill(COLOR_WHITE if i % 2 == 0 else COLOR_LIGHT_GREY)
+                cell.fill = row_fill
+                bb.row_dimensions[bb_row].height = 28
+                bb_row += 1
+        else:
+            for _ in range(5):
+                bb.row_dimensions[bb_row].height = 14
+                bb_row += 1
+
+        bb_row += 1  # gap between sections
 
 
 # ─── Excel Builder: Software Template ────────────────────────────────────────
@@ -673,49 +758,857 @@ def build_software_template(
     blank_row()
 
     # ════════════════════════════════════════════════════════════════════════════
-    # BULL BEAR & TAILWINDS sheet
+    # BULL BEAR & TAILWINDS
     # ════════════════════════════════════════════════════════════════════════════
-    bb = wb.create_sheet("Bull Bear & Tailwinds")
-    bb.column_dimensions["A"].width = 80
-
-    # Map JSON keys to display section names
-    bb_section_map = [
-        ("bull_case", "Bull Case"),
-        ("bear_case", "Bear Case"),
-        ("tailwinds", "Key Tailwinds"),
-        ("headwinds", "Key Risks"),
-        ("watchlist_metrics", "Watchlist Metrics"),
-    ]
-
-    bb_row = 1
-    for json_key, section_name in bb_section_map:
-        bb.merge_cells(f"A{bb_row}:H{bb_row}")
-        hdr = bb[f"A{bb_row}"]
-        hdr.value = section_name
-        hdr.font = _font(bold=True, color=COLOR_WHITE)
-        hdr.fill = _fill(COLOR_BLACK)
-        hdr.alignment = _align("left", indent=1)
-        bb.row_dimensions[bb_row].height = 16
-        bb_row += 1
-
-        items = (bull_bear or {}).get(json_key, [])
-        if items:
-            for i, item in enumerate(items):
-                cell = bb.cell(row=bb_row, column=1, value=f"  {i+1}. {item}")
-                cell.font = _font()
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
-                row_fill = _fill(COLOR_WHITE if i % 2 == 0 else COLOR_LIGHT_GREY)
-                cell.fill = row_fill
-                bb.row_dimensions[bb_row].height = 28
-                bb_row += 1
-        else:
-            for _ in range(5):
-                bb.row_dimensions[bb_row].height = 14
-                bb_row += 1
-
-        bb_row += 1  # gap between sections
+    _build_bull_bear_sheet(wb, bull_bear)
 
     # ── Serialize ──
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.read()
+
+
+# ─── Excel Builder: Banking Template ────────────────────────────────────────
+
+def build_banking_template(
+    sheets: dict,
+    offsets: dict,
+    quarters: list,
+    ttm_cols: dict,
+    ntm_cols: dict,
+    ticker: str,
+    company_name: str,
+    bull_bear: dict | None = None,
+) -> bytes:
+    wb = openpyxl.Workbook()
+    cs = wb.active
+    cs.title = "Core Sheet"
+
+    for key, name in [("IS", "IS"), ("CF", "CF"), ("BS", "BS"), ("RAT", "RAT"), ("SEG", "SEG")]:
+        ws = sheets.get(key)
+        if ws:
+            copy_sheet_data(ws, wb, name)
+
+    cs.freeze_panes = "E3"
+    cs.sheet_view.zoomScale = 80
+
+    widths = {1: 38, 2: 4, 3: 8, 4: 11}
+    for c in range(5, 17):
+        widths[c] = 11
+    widths[17] = 12
+    for col_idx, w in widths.items():
+        cs.column_dimensions[get_column_letter(col_idx)].width = w
+
+    cs.merge_cells("A1:Q1")
+    c1 = cs["A1"]
+    c1.value = f"{company_name}  ({ticker})"
+    c1.font = Font(name=FONT_NAME, size=12, bold=True, color=COLOR_BLACK)
+    c1.alignment = _align("left")
+    cs.row_dimensions[1].height = 18
+
+    cs["C2"].value = "TTM"
+    cs["C2"].font = _font(bold=True)
+    cs["C2"].alignment = _align("center")
+
+    for q_idx, q_label in enumerate(quarters):
+        col = 5 + q_idx
+        cell = cs.cell(row=2, column=col, value=q_label)
+        cell.font = _font(bold=True)
+        cell.alignment = _align("center")
+
+    cs["Q2"].value = "Fwd NTM"
+    cs["Q2"].font = _font(bold=True)
+    cs["Q2"].alignment = _align("center")
+    cs.row_dimensions[2].height = 15
+
+    current_row = [3]
+
+    def _read_val_b(ws, row, col):
+        """Read actual numeric value from a cell (not formula)."""
+        if ws is None or row is None:
+            return None
+        v = ws.cell(row=row, column=col).value
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    def section_header(label: str):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_BLACK)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def sub_header(label: str):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_DARK_GREY)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def data_row(label: str, src_key: str, src_label: str, number_format: str = FMT_NUMBER):
+        r = current_row[0]
+        row_fill = _fill(COLOR_WHITE if (r - 3) % 2 == 0 else COLOR_LIGHT_GREY)
+
+        a = cs.cell(row=r, column=1, value=label)
+        a.font = _font()
+        a.fill = row_fill
+
+        for empty_col in [2, 4]:
+            ec = cs.cell(row=r, column=empty_col)
+            ec.fill = row_fill
+
+        src_ws = sheets.get(src_key)
+        src_row = find_row(src_ws, src_label) if src_ws else None
+
+        def make_formula(src_col_1indexed: int) -> str:
+            col_letter = get_column_letter(src_col_1indexed)
+            return f"={src_key}!{col_letter}{src_row}"
+
+        def make_iferror_formula(src_col_1indexed: int) -> str:
+            col_letter = get_column_letter(src_col_1indexed)
+            return f'=IFERROR({src_key}!{col_letter}{src_row},"")'
+
+        c_ttm = cs.cell(row=r, column=3)
+        c_ttm.fill = row_fill
+        if src_row and src_ws:
+            ttm_c = ttm_cols.get(src_key)
+            if ttm_c:
+                c_ttm.value = make_formula(ttm_c)
+            else:
+                offset = offsets.get(src_key, 0)
+                cols_for_ttm = [get_column_letter(5 + 8 + offset + i) for i in range(4)]
+                c_ttm.value = f"=SUM({src_key}!{cols_for_ttm[0]}{src_row}:{src_key}!{cols_for_ttm[3]}{src_row})"
+            c_ttm.font = _font(color=COLOR_GREEN)
+            c_ttm.number_format = number_format
+            c_ttm.alignment = _align("right")
+
+        offset = offsets.get(src_key, 0)
+        for q_idx in range(12):
+            col = 5 + q_idx
+            src_col = (5 + q_idx) + offset
+            cell = cs.cell(row=r, column=col)
+            cell.fill = row_fill
+            if src_row and src_ws:
+                cell.value = make_formula(src_col)
+                cell.font = _font(color=COLOR_GREEN)
+                cell.number_format = number_format
+                cell.alignment = _align("right")
+
+        c_ntm = cs.cell(row=r, column=17)
+        c_ntm.fill = row_fill
+        if src_row and src_ws:
+            ntm_c = ntm_cols.get(src_key)
+            if ntm_c:
+                c_ntm.value = make_iferror_formula(ntm_c)
+            else:
+                ntm_src_col = (5 + 12) + offset
+                c_ntm.value = make_iferror_formula(ntm_src_col)
+            c_ntm.font = _font(color=COLOR_GREEN)
+            c_ntm.number_format = number_format
+            c_ntm.alignment = _align("right")
+
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def blank_row():
+        cs.row_dimensions[current_row[0]].height = 6
+        current_row[0] += 1
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # INCOME STATEMENT (Banking)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("INCOME STATEMENT")
+    data_row("Net Interest Income",         "IS", "Net Interest Income")
+    data_row("Noninterest Revenue",         "IS", "Noninterest Revenue")
+    data_row("Total Net Revenue",           "IS", "Total Revenue|Total Net Revenue|Net Revenue")
+    data_row("Revenue Growth YoY",          "IS", "Revenue Growth", FMT_PCT)
+    data_row("Provision for Credit Losses", "IS", "Provision for Credit Losses")
+    data_row("Noninterest Expense",         "IS", "Noninterest Expense|Total Noninterest")
+    data_row("Pre-Tax Income",              "IS", "Pre-Tax Income|Income Before Tax")
+    data_row("Net Income",                  "IS", "Net Income")
+    data_row("Net Margin",                  "IS", "Net Margin", FMT_PCT)
+    data_row("Diluted EPS",                 "IS", "Diluted EPS")
+    data_row("Diluted Shares",              "IS", "Diluted Shares")
+    data_row("Efficiency Ratio",            "IS", "Efficiency Ratio", FMT_PCT)
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # CASH FLOW (Banking)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("CASH FLOW")
+    data_row("Cash from Operations",      "CF", "Operating")
+    data_row("Capital Expenditures",      "CF", "Capital Expenditure")
+    data_row("Dividends Paid",            "CF", "Dividend")
+    data_row("Share Buybacks",            "CF", "Repurchase")
+    data_row("Acquisitions",              "CF", "Acquisition")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # BALANCE SHEET (Banking)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("BALANCE SHEET")
+    data_row("Total Assets",              "BS", "Total Assets")
+    data_row("Total Loans, Net",          "BS", "Total Loans|Net Loans")
+    data_row("Total Deposits",            "BS", "Total Deposits|Deposits")
+    data_row("Total Debt",                "BS", "Total Debt")
+    data_row("Shareholders' Equity",      "BS", "Equity")
+    data_row("Tangible Book Value",       "BS", "Tangible Book Value")
+    data_row("Book Value per Share",      "BS", "Book Value Per Share|BVPS")
+    data_row("Tangible BV per Share",     "BS", "Tangible Book Value Per Share|TBVPS")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # SEGMENTS (Banking — auto-detect from SEG sheet)
+    # ════════════════════════════════════════════════════════════════════════════
+    seg_ws = sheets.get("SEG")
+    if seg_ws:
+        section_header("SEGMENTS")
+        seg_labels = []
+        for r in range(1, min(seg_ws.max_row + 1, 80)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if label and label.lower() not in ("", "none"):
+                seg_labels.append(label)
+        for lbl in seg_labels:
+            # Detect format from label name
+            fmt = FMT_NUMBER
+            lbl_lower = lbl.lower()
+            if "margin" in lbl_lower or "ratio" in lbl_lower or "growth" in lbl_lower or "mix" in lbl_lower:
+                fmt = FMT_PCT
+            data_row(lbl, "SEG", lbl, fmt)
+        blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # VALUATION (Banking — P/B, P/TBV instead of EV multiples)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("VALUATION")
+
+    sub_header("Price Multiples")
+    data_row("P/E",                "RAT", "P/E",   FMT_RATIO)
+    data_row("P/B",                "RAT", "P/B",   FMT_RATIO)
+    data_row("P/TBV",             "RAT", "P/TBV|Price/Tangible", FMT_RATIO)
+
+    sub_header("Returns")
+    data_row("Return on Equity (ROE)",    "RAT", "Return on Equity",    FMT_PCT)
+    data_row("Return on Assets (ROA)",    "RAT", "Return on Assets",    FMT_PCT)
+    data_row("Return on Tangible Equity", "RAT", "Return on Tangible|ROTE", FMT_PCT)
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # BULL BEAR & TAILWINDS
+    # ════════════════════════════════════════════════════════════════════════════
+    _build_bull_bear_sheet(wb, bull_bear)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.read()
+
+
+# ─── Excel Builder: Financials Template ────────────────────────────────────
+
+def build_financials_template(
+    sheets: dict,
+    offsets: dict,
+    quarters: list,
+    ttm_cols: dict,
+    ntm_cols: dict,
+    ticker: str,
+    company_name: str,
+    bull_bear: dict | None = None,
+) -> bytes:
+    wb = openpyxl.Workbook()
+    cs = wb.active
+    cs.title = "Core Sheet"
+
+    for key, name in [("IS", "IS"), ("CF", "CF"), ("BS", "BS"), ("RAT", "RAT"), ("SEG", "SEG")]:
+        ws = sheets.get(key)
+        if ws:
+            copy_sheet_data(ws, wb, name)
+
+    cs.freeze_panes = "E3"
+    cs.sheet_view.zoomScale = 80
+
+    widths = {1: 38, 2: 4, 3: 8, 4: 11}
+    for c in range(5, 17):
+        widths[c] = 11
+    widths[17] = 12
+    for col_idx, w in widths.items():
+        cs.column_dimensions[get_column_letter(col_idx)].width = w
+
+    cs.merge_cells("A1:Q1")
+    c1 = cs["A1"]
+    c1.value = f"{company_name}  ({ticker})"
+    c1.font = Font(name=FONT_NAME, size=12, bold=True, color=COLOR_BLACK)
+    c1.alignment = _align("left")
+    cs.row_dimensions[1].height = 18
+
+    cs["C2"].value = "TTM"
+    cs["C2"].font = _font(bold=True)
+    cs["C2"].alignment = _align("center")
+
+    for q_idx, q_label in enumerate(quarters):
+        col = 5 + q_idx
+        cell = cs.cell(row=2, column=col, value=q_label)
+        cell.font = _font(bold=True)
+        cell.alignment = _align("center")
+
+    cs["Q2"].value = "Fwd NTM"
+    cs["Q2"].font = _font(bold=True)
+    cs["Q2"].alignment = _align("center")
+    cs.row_dimensions[2].height = 15
+
+    current_row = [3]
+
+    def section_header(label: str):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_BLACK)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def sub_header(label: str):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_DARK_GREY)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def data_row(label: str, src_key: str, src_label: str, number_format: str = FMT_NUMBER):
+        r = current_row[0]
+        row_fill = _fill(COLOR_WHITE if (r - 3) % 2 == 0 else COLOR_LIGHT_GREY)
+
+        a = cs.cell(row=r, column=1, value=label)
+        a.font = _font()
+        a.fill = row_fill
+
+        for empty_col in [2, 4]:
+            ec = cs.cell(row=r, column=empty_col)
+            ec.fill = row_fill
+
+        src_ws = sheets.get(src_key)
+        src_row = find_row(src_ws, src_label) if src_ws else None
+
+        def make_formula(src_col_1indexed: int) -> str:
+            col_letter = get_column_letter(src_col_1indexed)
+            return f"={src_key}!{col_letter}{src_row}"
+
+        def make_iferror_formula(src_col_1indexed: int) -> str:
+            col_letter = get_column_letter(src_col_1indexed)
+            return f'=IFERROR({src_key}!{col_letter}{src_row},"")'
+
+        c_ttm = cs.cell(row=r, column=3)
+        c_ttm.fill = row_fill
+        if src_row and src_ws:
+            ttm_c = ttm_cols.get(src_key)
+            if ttm_c:
+                c_ttm.value = make_formula(ttm_c)
+            else:
+                offset = offsets.get(src_key, 0)
+                cols_for_ttm = [get_column_letter(5 + 8 + offset + i) for i in range(4)]
+                c_ttm.value = f"=SUM({src_key}!{cols_for_ttm[0]}{src_row}:{src_key}!{cols_for_ttm[3]}{src_row})"
+            c_ttm.font = _font(color=COLOR_GREEN)
+            c_ttm.number_format = number_format
+            c_ttm.alignment = _align("right")
+
+        offset = offsets.get(src_key, 0)
+        for q_idx in range(12):
+            col = 5 + q_idx
+            src_col = (5 + q_idx) + offset
+            cell = cs.cell(row=r, column=col)
+            cell.fill = row_fill
+            if src_row and src_ws:
+                cell.value = make_formula(src_col)
+                cell.font = _font(color=COLOR_GREEN)
+                cell.number_format = number_format
+                cell.alignment = _align("right")
+
+        c_ntm = cs.cell(row=r, column=17)
+        c_ntm.fill = row_fill
+        if src_row and src_ws:
+            ntm_c = ntm_cols.get(src_key)
+            if ntm_c:
+                c_ntm.value = make_iferror_formula(ntm_c)
+            else:
+                ntm_src_col = (5 + 12) + offset
+                c_ntm.value = make_iferror_formula(ntm_src_col)
+            c_ntm.font = _font(color=COLOR_GREEN)
+            c_ntm.number_format = number_format
+            c_ntm.alignment = _align("right")
+
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def blank_row():
+        cs.row_dimensions[current_row[0]].height = 6
+        current_row[0] += 1
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # INCOME STATEMENT (Financials — SPGI style)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("INCOME STATEMENT")
+    data_row("Revenue",               "IS", "Revenue|Total Revenue")
+    data_row("Revenue Growth YoY",    "IS", "Revenue Growth",    FMT_PCT)
+    data_row("Operating Expenses",    "IS", "Operating Expense|Total Operating")
+    data_row("Operating Income",      "IS", "Operating Income")
+    data_row("Operating Margin",      "IS", "Operating Margin",  FMT_PCT)
+    data_row("EBITDA",                "IS", "EBITDA")
+    data_row("EBITDA Margin",         "IS", "EBITDA Margin",     FMT_PCT)
+    data_row("Interest Expense",      "IS", "Interest Expense")
+    data_row("Net Income",            "IS", "Net Income")
+    data_row("Net Margin",            "IS", "Net Margin",        FMT_PCT)
+    data_row("Diluted EPS",           "IS", "Diluted EPS")
+    data_row("Diluted Shares",        "IS", "Diluted Shares")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # CASH FLOW (Financials)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("CASH FLOW")
+    data_row("Cash from Operations",      "CF", "Operating")
+    data_row("Capital Expenditures",      "CF", "Capital Expenditure")
+    data_row("Free Cash Flow",            "CF", "Free Cash Flow")
+    data_row("FCF Margin",                "CF", "FCF Margin",         FMT_PCT)
+    data_row("Stock-Based Compensation",  "CF", "Stock-Based")
+    data_row("Acquisitions",              "CF", "Acquisition")
+    data_row("Share Buybacks",            "CF", "Repurchase")
+    data_row("Dividends Paid",            "CF", "Dividend")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # SEGMENTS (Financials — auto-detect from SEG sheet)
+    # e.g. Market Intelligence, Ratings, Commodity Insights, Mobility, Indices
+    # ════════════════════════════════════════════════════════════════════════════
+    seg_ws = sheets.get("SEG")
+    if seg_ws:
+        section_header("SEGMENTS")
+
+        # Scan SEG sheet for segment labels and group them
+        seg_labels = []
+        for r in range(1, min(seg_ws.max_row + 1, 120)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if label and label.lower() not in ("", "none"):
+                seg_labels.append(label)
+
+        # Group by revenue segments, then operating profit, then margins
+        rev_labels = []
+        op_labels = []
+        margin_labels = []
+        growth_labels = []
+        mix_labels = []
+        other_labels = []
+
+        for lbl in seg_labels:
+            ll = lbl.lower()
+            if "revenue" in ll and "growth" not in ll and "mix" not in ll:
+                rev_labels.append(lbl)
+            elif "operating profit" in ll or "operating income" in ll:
+                op_labels.append(lbl)
+            elif "margin" in ll:
+                margin_labels.append(lbl)
+            elif "growth" in ll:
+                growth_labels.append(lbl)
+            elif "mix" in ll or "% of" in ll:
+                mix_labels.append(lbl)
+            else:
+                other_labels.append(lbl)
+
+        if rev_labels:
+            sub_header("Segment Revenue")
+            for lbl in rev_labels:
+                data_row(lbl, "SEG", lbl)
+
+        if op_labels:
+            sub_header("Segment Operating Profit")
+            for lbl in op_labels:
+                data_row(lbl, "SEG", lbl)
+
+        if margin_labels:
+            sub_header("Segment Margins")
+            for lbl in margin_labels:
+                data_row(lbl, "SEG", lbl, FMT_PCT)
+
+        if growth_labels:
+            sub_header("Segment Growth")
+            for lbl in growth_labels:
+                data_row(lbl, "SEG", lbl, FMT_PCT)
+
+        if mix_labels:
+            sub_header("Revenue Mix")
+            for lbl in mix_labels:
+                data_row(lbl, "SEG", lbl, FMT_PCT)
+
+        if other_labels:
+            sub_header("Other KPIs")
+            for lbl in other_labels:
+                data_row(lbl, "SEG", lbl)
+
+        blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # BALANCE SHEET (Financials)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("BALANCE SHEET")
+    data_row("Cash & Equivalents",     "BS", "Cash")
+    data_row("Total Assets",           "BS", "Total Assets")
+    data_row("Goodwill & Intangibles", "BS", "Goodwill|Intangible")
+    data_row("Total Debt",             "BS", "Total Debt")
+    data_row("Net Cash / (Debt)",      "BS", "Net Cash")
+    data_row("Shareholders' Equity",   "BS", "Equity")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # VALUATION (Financials)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("VALUATION")
+
+    sub_header("Price Multiples")
+    data_row("P/E",             "RAT", "P/E",   FMT_RATIO)
+    data_row("P/FCF",           "RAT", "P/FCF", FMT_RATIO)
+    data_row("P/S",             "RAT", "P/S",   FMT_RATIO)
+
+    sub_header("EV Multiples")
+    data_row("EV / Revenue",    "RAT", "EV/Revenue", FMT_RATIO)
+    data_row("EV / EBITDA",     "RAT", "EV/EBITDA",  FMT_RATIO)
+    data_row("EV / EBIT",       "RAT", "EV/EBIT",    FMT_RATIO)
+    data_row("EV / FCF",        "RAT", "EV/FCF",     FMT_RATIO)
+
+    sub_header("Returns")
+    data_row("Return on Equity (ROE)",          "RAT", "Return on Equity",          FMT_PCT)
+    data_row("Return on Assets (ROA)",          "RAT", "Return on Assets",          FMT_PCT)
+    data_row("Return on Invested Capital (ROIC)","RAT","Return on Invested Capital", FMT_PCT)
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # BULL BEAR & TAILWINDS
+    # ════════════════════════════════════════════════════════════════════════════
+    _build_bull_bear_sheet(wb, bull_bear)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.read()
+
+
+# ─── Excel Builder: Internet Template ──────────────────────────────────────
+
+def build_internet_template(
+    sheets: dict,
+    offsets: dict,
+    quarters: list,
+    ttm_cols: dict,
+    ntm_cols: dict,
+    ticker: str,
+    company_name: str,
+    bull_bear: dict | None = None,
+) -> bytes:
+    wb = openpyxl.Workbook()
+    cs = wb.active
+    cs.title = "Core Sheet"
+
+    for key, name in [("IS", "IS"), ("CF", "CF"), ("BS", "BS"), ("RAT", "RAT"), ("SEG", "SEG")]:
+        ws = sheets.get(key)
+        if ws:
+            copy_sheet_data(ws, wb, name)
+
+    cs.freeze_panes = "E3"
+    cs.sheet_view.zoomScale = 80
+
+    widths = {1: 38, 2: 4, 3: 8, 4: 11}
+    for c in range(5, 17):
+        widths[c] = 11
+    widths[17] = 12
+    for col_idx, w in widths.items():
+        cs.column_dimensions[get_column_letter(col_idx)].width = w
+
+    cs.merge_cells("A1:Q1")
+    c1 = cs["A1"]
+    c1.value = f"{company_name}  ({ticker})"
+    c1.font = Font(name=FONT_NAME, size=12, bold=True, color=COLOR_BLACK)
+    c1.alignment = _align("left")
+    cs.row_dimensions[1].height = 18
+
+    cs["C2"].value = "TTM"
+    cs["C2"].font = _font(bold=True)
+    cs["C2"].alignment = _align("center")
+
+    for q_idx, q_label in enumerate(quarters):
+        col = 5 + q_idx
+        cell = cs.cell(row=2, column=col, value=q_label)
+        cell.font = _font(bold=True)
+        cell.alignment = _align("center")
+
+    cs["Q2"].value = "Fwd NTM"
+    cs["Q2"].font = _font(bold=True)
+    cs["Q2"].alignment = _align("center")
+    cs.row_dimensions[2].height = 15
+
+    current_row = [3]
+
+    def _read_val_b(ws, row, col):
+        """Read actual numeric value from a cell (not formula)."""
+        if ws is None or row is None:
+            return None
+        v = ws.cell(row=row, column=col).value
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    def section_header(label: str):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_BLACK)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def sub_header(label: str):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_DARK_GREY)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def data_row(label: str, src_key: str, src_label: str, number_format: str = FMT_NUMBER):
+        r = current_row[0]
+        row_fill = _fill(COLOR_WHITE if (r - 3) % 2 == 0 else COLOR_LIGHT_GREY)
+
+        a = cs.cell(row=r, column=1, value=label)
+        a.font = _font()
+        a.fill = row_fill
+
+        for empty_col in [2, 4]:
+            ec = cs.cell(row=r, column=empty_col)
+            ec.fill = row_fill
+
+        src_ws = sheets.get(src_key)
+        src_row = find_row(src_ws, src_label) if src_ws else None
+
+        def make_formula(src_col_1indexed: int) -> str:
+            col_letter = get_column_letter(src_col_1indexed)
+            return f"={src_key}!{col_letter}{src_row}"
+
+        def make_iferror_formula(src_col_1indexed: int) -> str:
+            col_letter = get_column_letter(src_col_1indexed)
+            return f'=IFERROR({src_key}!{col_letter}{src_row},"")'
+
+        c_ttm = cs.cell(row=r, column=3)
+        c_ttm.fill = row_fill
+        if src_row and src_ws:
+            ttm_c = ttm_cols.get(src_key)
+            if ttm_c:
+                c_ttm.value = make_formula(ttm_c)
+            else:
+                offset = offsets.get(src_key, 0)
+                cols_for_ttm = [get_column_letter(5 + 8 + offset + i) for i in range(4)]
+                c_ttm.value = f"=SUM({src_key}!{cols_for_ttm[0]}{src_row}:{src_key}!{cols_for_ttm[3]}{src_row})"
+            c_ttm.font = _font(color=COLOR_GREEN)
+            c_ttm.number_format = number_format
+            c_ttm.alignment = _align("right")
+
+        offset = offsets.get(src_key, 0)
+        for q_idx in range(12):
+            col = 5 + q_idx
+            src_col = (5 + q_idx) + offset
+            cell = cs.cell(row=r, column=col)
+            cell.fill = row_fill
+            if src_row and src_ws:
+                cell.value = make_formula(src_col)
+                cell.font = _font(color=COLOR_GREEN)
+                cell.number_format = number_format
+                cell.alignment = _align("right")
+
+        c_ntm = cs.cell(row=r, column=17)
+        c_ntm.fill = row_fill
+        if src_row and src_ws:
+            ntm_c = ntm_cols.get(src_key)
+            if ntm_c:
+                c_ntm.value = make_iferror_formula(ntm_c)
+            else:
+                ntm_src_col = (5 + 12) + offset
+                c_ntm.value = make_iferror_formula(ntm_src_col)
+            c_ntm.font = _font(color=COLOR_GREEN)
+            c_ntm.number_format = number_format
+            c_ntm.alignment = _align("right")
+
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def blank_row():
+        cs.row_dimensions[current_row[0]].height = 6
+        current_row[0] += 1
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # INCOME STATEMENT (Internet — Tencent style)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("INCOME STATEMENT")
+    data_row("Revenue",               "IS", "Revenue|Total Revenue|Revenues")
+    data_row("Revenue Growth YoY",    "IS", "Revenue Growth",    FMT_PCT)
+    data_row("Cost of Revenue",       "IS", "Cost of Revenue|Cost of Sales")
+    data_row("Gross Profit",          "IS", "Gross Profit")
+    data_row("Gross Margin",          "IS", "Gross Margin",      FMT_PCT)
+    data_row("Selling & Marketing",   "IS", "Selling|Marketing|Sales")
+    data_row("G&A",                   "IS", "General")
+    data_row("R&D",                   "IS", "Research")
+    data_row("Operating Income",      "IS", "Operating Income")
+    data_row("Operating Margin",      "IS", "Operating Margin",  FMT_PCT)
+    data_row("EBITDA",                "IS", "EBITDA")
+    data_row("EBITDA Margin",         "IS", "EBITDA Margin",     FMT_PCT)
+    data_row("Net Income",            "IS", "Net Income")
+    data_row("Net Margin",            "IS", "Net Margin",        FMT_PCT)
+    data_row("Diluted EPS",           "IS", "Diluted EPS")
+    data_row("Diluted Shares",        "IS", "Diluted Shares")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # CASH FLOW (Internet)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("CASH FLOW")
+    data_row("Cash from Operations",      "CF", "Operating")
+    data_row("Capital Expenditures",      "CF", "Capital Expenditure")
+    data_row("Free Cash Flow",            "CF", "Free Cash Flow")
+    data_row("FCF Margin",                "CF", "FCF Margin",         FMT_PCT)
+    data_row("Stock-Based Compensation",  "CF", "Stock-Based")
+    data_row("Acquisitions",              "CF", "Acquisition")
+    data_row("Share Buybacks",            "CF", "Repurchase")
+    data_row("Dividends Paid",            "CF", "Dividend")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # SEGMENTS (Internet — auto-detect from SEG sheet)
+    # e.g. VAS Revenue, Games Revenue, Online Advertising, FinTech & Business Services
+    # ════════════════════════════════════════════════════════════════════════════
+    seg_ws = sheets.get("SEG")
+    if seg_ws:
+        section_header("SEGMENTS & KPIs")
+
+        seg_labels = []
+        for r in range(1, min(seg_ws.max_row + 1, 120)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if label and label.lower() not in ("", "none"):
+                seg_labels.append(label)
+
+        # Group by revenue, user metrics (MAU/DAU), growth, mix, other
+        rev_labels = []
+        user_labels = []
+        growth_labels = []
+        mix_labels = []
+        other_labels = []
+
+        for lbl in seg_labels:
+            ll = lbl.lower()
+            if "revenue" in ll and "growth" not in ll and "mix" not in ll:
+                rev_labels.append(lbl)
+            elif "mau" in ll or "dau" in ll or "user" in ll or "subscriber" in ll or "account" in ll:
+                user_labels.append(lbl)
+            elif "growth" in ll:
+                growth_labels.append(lbl)
+            elif "mix" in ll or "% of" in ll:
+                mix_labels.append(lbl)
+            else:
+                other_labels.append(lbl)
+
+        if rev_labels:
+            sub_header("Segment Revenue")
+            for lbl in rev_labels:
+                data_row(lbl, "SEG", lbl)
+
+        if user_labels:
+            sub_header("User Metrics / KPIs")
+            for lbl in user_labels:
+                data_row(lbl, "SEG", lbl)
+
+        if growth_labels:
+            sub_header("Segment Growth")
+            for lbl in growth_labels:
+                data_row(lbl, "SEG", lbl, FMT_PCT)
+
+        if mix_labels:
+            sub_header("Revenue Mix")
+            for lbl in mix_labels:
+                data_row(lbl, "SEG", lbl, FMT_PCT)
+
+        if other_labels:
+            sub_header("Other KPIs")
+            for lbl in other_labels:
+                # Detect format from label name
+                fmt = FMT_NUMBER
+                ll = lbl.lower()
+                if "margin" in ll or "ratio" in ll:
+                    fmt = FMT_PCT
+                data_row(lbl, "SEG", lbl, fmt)
+
+        blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # BALANCE SHEET (Internet)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("BALANCE SHEET")
+    data_row("Cash & Equivalents",     "BS", "Cash")
+    data_row("Total Assets",           "BS", "Total Assets")
+    data_row("Goodwill & Intangibles", "BS", "Goodwill|Intangible")
+    data_row("Total Debt",             "BS", "Total Debt")
+    data_row("Net Cash / (Debt)",      "BS", "Net Cash")
+    data_row("Shareholders' Equity",   "BS", "Equity")
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # VALUATION (Internet)
+    # ════════════════════════════════════════════════════════════════════════════
+    section_header("VALUATION")
+
+    sub_header("Price Multiples")
+    data_row("P/E",             "RAT", "P/E",   FMT_RATIO)
+    data_row("P/FCF",           "RAT", "P/FCF", FMT_RATIO)
+    data_row("P/S",             "RAT", "P/S",   FMT_RATIO)
+
+    sub_header("EV Multiples")
+    data_row("EV / Revenue",    "RAT", "EV/Revenue", FMT_RATIO)
+    data_row("EV / EBITDA",     "RAT", "EV/EBITDA",  FMT_RATIO)
+    data_row("EV / EBIT",       "RAT", "EV/EBIT",    FMT_RATIO)
+    data_row("EV / FCF",        "RAT", "EV/FCF",     FMT_RATIO)
+
+    sub_header("Returns")
+    data_row("Return on Equity (ROE)",          "RAT", "Return on Equity",          FMT_PCT)
+    data_row("Return on Assets (ROA)",          "RAT", "Return on Assets",          FMT_PCT)
+    data_row("Return on Invested Capital (ROIC)","RAT","Return on Invested Capital", FMT_PCT)
+    blank_row()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # BULL BEAR & TAILWINDS
+    # ════════════════════════════════════════════════════════════════════════════
+    _build_bull_bear_sheet(wb, bull_bear)
+
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -756,8 +1649,14 @@ class handler(BaseHTTPRequestHandler):
             # 4. Fetch bull/bear thesis from DB (if previously generated)
             bull_bear = fetch_bull_bear(company_id)
 
-            # 5. Build Excel (software template for now; extend for other company types)
-            excel_bytes = build_software_template(
+            # 5. Build Excel — route to the correct template by company type
+            build_fn_map = {
+                "banking": build_banking_template,
+                "financials": build_financials_template,
+                "internet": build_internet_template,
+            }
+            build_fn = build_fn_map.get(company_type, build_software_template)
+            excel_bytes = build_fn(
                 sheets, offsets, quarters, ttm_cols, ntm_cols, ticker, company_name,
                 bull_bear=bull_bear,
             )
