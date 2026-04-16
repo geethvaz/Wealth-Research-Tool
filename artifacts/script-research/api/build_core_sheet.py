@@ -86,22 +86,13 @@ def fetch_sheets(job_id: int) -> dict:
         if key and file_data and key not in sheets:
             try:
                 file_bytes = base64.b64decode(file_data)
-                # Try data_only=True first to get cached values from formulas.
-                # If that yields all-None data, fall back to reading raw values.
-                wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
-                ws = wb.active
-
-                # Quick check: if row 2+ col B is all None, the file likely has
-                # formulas without cached values.  Reload without data_only.
-                sample_vals = [
-                    ws.cell(row=r, column=2).value
-                    for r in range(2, min(ws.max_row + 1, 10))
-                ]
-                if all(v is None for v in sample_vals):
-                    wb2 = openpyxl.load_workbook(BytesIO(file_bytes), data_only=False)
-                    ws = wb2.active
-
-                sheets[key] = ws
+                # Load without data_only to preserve formulas.
+                # fiscal.ai files may have formulas without cached values,
+                # so data_only=True would return None for everything.
+                # Use worksheets[0] (not wb.active) because some xlsx files
+                # have a different active sheet than the data sheet.
+                wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=False)
+                sheets[key] = wb.worksheets[0]
             except Exception:
                 continue  # skip corrupted files
 
