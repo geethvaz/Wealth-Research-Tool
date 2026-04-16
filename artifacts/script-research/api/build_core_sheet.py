@@ -410,12 +410,15 @@ def detect_offsets(sheets: dict) -> tuple:
 # ─── Row Finder ───────────────────────────────────────────────────────────────
 
 def find_row(ws, search_str: str, col: int = 1) -> int | None:
-    """Scan a column for a case-insensitive partial match. Returns 1-based row."""
-    needle = search_str.lower()
-    for row in range(1, ws.max_row + 1):
-        val = str(ws.cell(row=row, column=col).value or "").lower()
-        if needle in val:
-            return row
+    """Scan a column for a case-insensitive partial match. Returns 1-based row.
+    search_str can be a single string or pipe-separated alternatives: 'Revenue|Total Revenues'
+    """
+    needles = [n.strip().lower() for n in search_str.split("|")]
+    for needle in needles:
+        for row in range(1, ws.max_row + 1):
+            val = str(ws.cell(row=row, column=col).value or "").lower()
+            if needle in val:
+                return row
     return None
 
 
@@ -610,34 +613,34 @@ def build_software_template(
     # INCOME STATEMENT
     # ════════════════════════════════════════════════════════════════════════════
     section_header("INCOME STATEMENT")
-    data_row("Revenue",               "IS", "Revenue")
-    data_row("Revenue Growth YoY",    "IS", "Revenue Growth",    FMT_PCT)
+    data_row("Revenue",               "IS", "Total Revenue|Revenue")
+    data_row("Revenue Growth YoY",    "IS", "Revenue %Chg|Revenue Growth",    FMT_PCT)
     data_row("Gross Profit",          "IS", "Gross Profit")
-    data_row("Gross Margin",          "IS", "Gross Margin",      FMT_PCT)
-    data_row("R&D",                   "IS", "Research")
-    data_row("S&M / Sales & Marketing","IS", "Sales")
-    data_row("G&A",                   "IS", "General")
-    data_row("Operating Income",      "IS", "Operating Income")
+    data_row("Gross Margin",          "IS", "Gross Profit Margin|Gross Margin",      FMT_PCT)
+    data_row("R&D",                   "IS", "Research & Development|Research")
+    data_row("S&M / SG&A",           "IS", "Selling, General|Sales, General|SG&A")
+    data_row("G&A",                   "IS", "General & Admin|General")
+    data_row("Operating Income",      "IS", "Operating Profit|Operating Income")
     data_row("Operating Margin",      "IS", "Operating Margin",  FMT_PCT)
-    data_row("EBITDA",                "IS", "EBITDA")
+    data_row("EBITDA",                "IS", "EBITDA (B)|EBITDA")
     data_row("EBITDA Margin",         "IS", "EBITDA Margin",     FMT_PCT)
-    data_row("Net Income",            "IS", "Net Income")
-    data_row("Net Margin",            "IS", "Net Margin",        FMT_PCT)
+    data_row("Net Income",            "IS", "Net Income Attributable to Common|Consolidated Net Income|Net Income")
+    data_row("Net Margin",            "IS", "Net Profit Margin|Net Margin",        FMT_PCT)
     data_row("Diluted EPS",           "IS", "Diluted EPS")
-    data_row("Diluted Shares",        "IS", "Diluted Shares")
+    data_row("Diluted Shares",        "IS", "Diluted Weighted Average|Diluted Shares")
     blank_row()
 
     # ════════════════════════════════════════════════════════════════════════════
     # CASH FLOW
     # ════════════════════════════════════════════════════════════════════════════
     section_header("CASH FLOW")
-    data_row("Cash from Operations",      "CF", "Operating")
-    data_row("Capital Expenditures",      "CF", "Capital Expenditure")
+    data_row("Cash from Operations",      "CF", "Cash from Operating|Net cash provided by operating")
+    data_row("Capital Expenditures",      "CF", "Capital Expenditure|Purchase of property")
     data_row("Free Cash Flow",            "CF", "Free Cash Flow")
-    data_row("FCF Margin",                "CF", "FCF Margin",         FMT_PCT)
-    data_row("Stock-Based Compensation",  "CF", "Stock-Based")
-    data_row("Acquisitions",              "CF", "Acquisition")
-    data_row("Share Buybacks",            "CF", "Repurchase")
+    data_row("FCF Margin",                "RAT", "Free Cash Flow Margin|FCF Margin",         FMT_PCT)
+    data_row("Stock-Based Compensation",  "CF", "Share-Based Compensation|Stock-Based")
+    data_row("Acquisitions",              "CF", "Business Acquisition|Acquisition")
+    data_row("Share Buybacks",            "CF", "Repurchase|Purchase of treasury")
     data_row("Dividends Paid",            "CF", "Dividend")
     blank_row()
 
@@ -645,11 +648,11 @@ def build_software_template(
     # BALANCE SHEET
     # ════════════════════════════════════════════════════════════════════════════
     section_header("BALANCE SHEET")
-    data_row("Cash & Equivalents",     "BS", "Cash")
-    data_row("Total Assets",           "BS", "Total Assets")
-    data_row("Total Debt",             "BS", "Total Debt")
-    data_row("Net Cash / (Debt)",      "BS", "Net Cash")
-    data_row("Shareholders' Equity",   "BS", "Equity")
+    data_row("Cash & Equivalents",     "BS", "Cash and cash equivalents|Cash and Due|Cash")
+    data_row("Total Assets",           "BS", "Total assets")
+    data_row("Total Debt",             "RAT", "Total Debt")
+    data_row("Net Debt",               "RAT", "Net Debt")
+    data_row("Shareholders' Equity",   "BS", "Total Shareholders|Total stockholders|Total equity|Equity")
     blank_row()
 
     # ════════════════════════════════════════════════════════════════════════════
@@ -658,20 +661,22 @@ def build_software_template(
     section_header("VALUATION")
 
     sub_header("Price Multiples")
-    data_row("P/E",             "RAT", "P/E",   FMT_RATIO)
+    data_row("P/E",             "RAT", "P/E ",   FMT_RATIO)
     data_row("P/FCF",           "RAT", "P/FCF", FMT_RATIO)
-    data_row("P/S",             "RAT", "P/S",   FMT_RATIO)
+    data_row("P/S",             "RAT", "P/S ",   FMT_RATIO)
+    data_row("P/B",             "RAT", "P/B ",   FMT_RATIO)
 
     sub_header("EV Multiples")
-    data_row("EV / Revenue",    "RAT", "EV/Revenue", FMT_RATIO)
+    data_row("EV / Revenue",    "RAT", "EV/Sales|EV/Revenue", FMT_RATIO)
     data_row("EV / EBITDA",     "RAT", "EV/EBITDA",  FMT_RATIO)
     data_row("EV / EBIT",       "RAT", "EV/EBIT",    FMT_RATIO)
     data_row("EV / FCF",        "RAT", "EV/FCF",     FMT_RATIO)
+    data_row("EV / OCF",        "RAT", "EV/OCF",     FMT_RATIO)
 
     sub_header("Returns")
     data_row("Return on Equity (ROE)",          "RAT", "Return on Equity",          FMT_PCT)
-    data_row("Return on Assets (ROA)",          "RAT", "Return on Assets",          FMT_PCT)
-    data_row("Return on Invested Capital (ROIC)","RAT","Return on Invested Capital", FMT_PCT)
+    data_row("Return on Assets (ROA)",          "RAT", "Return on Assets|Return on Tangible Assets",          FMT_PCT)
+    data_row("ROIC",                            "RAT", "Return on Invested Capital|ROIC", FMT_PCT)
     blank_row()
 
     # ════════════════════════════════════════════════════════════════════════════
@@ -724,6 +729,252 @@ def build_software_template(
     return output.read()
 
 
+# ─── Excel Builder: Banking Template ─────────────────────────────────────────
+
+def build_banking_template(
+    sheets: dict,
+    offsets: dict,
+    quarters: list,
+    ttm_cols: dict,
+    ntm_cols: dict,
+    ticker: str,
+    company_name: str,
+    bull_bear: dict | None = None,
+) -> bytes:
+    """Build Core Sheet for banking companies (JPM, BAC, C, etc.)."""
+    wb = openpyxl.Workbook()
+    cs = wb.active
+    cs.title = "Core Sheet"
+
+    for key, name in [("IS", "IS"), ("CF", "CF"), ("BS", "BS"), ("RAT", "RAT"), ("SEG", "SEG")]:
+        ws = sheets.get(key)
+        if ws:
+            copy_sheet_data(ws, wb, name)
+
+    cs.freeze_panes = "E3"
+    cs.sheet_view.zoomScale = 80
+
+    widths = {1: 38, 2: 4, 3: 8, 4: 11}
+    for c in range(5, 17):
+        widths[c] = 11
+    widths[17] = 12
+    for col_idx, w in widths.items():
+        cs.column_dimensions[get_column_letter(col_idx)].width = w
+
+    cs.merge_cells("A1:Q1")
+    c1 = cs["A1"]
+    c1.value = f"{company_name}  ({ticker})"
+    c1.font = Font(name=FONT_NAME, size=12, bold=True, color=COLOR_BLACK)
+    c1.alignment = _align("left")
+    cs.row_dimensions[1].height = 18
+
+    cs["C2"].value = "TTM"
+    cs["C2"].font = _font(bold=True)
+    cs["C2"].alignment = _align("center")
+    for q_idx, q_label in enumerate(quarters):
+        col = 5 + q_idx
+        cell = cs.cell(row=2, column=col, value=q_label)
+        cell.font = _font(bold=True)
+        cell.alignment = _align("center")
+    cs["Q2"].value = "Fwd NTM"
+    cs["Q2"].font = _font(bold=True)
+    cs["Q2"].alignment = _align("center")
+    cs.row_dimensions[2].height = 15
+
+    current_row = [3]
+
+    def section_header(label):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_BLACK)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def sub_header(label):
+        r = current_row[0]
+        cs.merge_cells(f"A{r}:Q{r}")
+        cell = cs[f"A{r}"]
+        cell.value = label
+        cell.font = _font(bold=True, color=COLOR_WHITE)
+        cell.fill = _fill(COLOR_DARK_GREY)
+        cell.alignment = _align("left", indent=1)
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def data_row(label, src_key, src_label, number_format=FMT_NUMBER):
+        r = current_row[0]
+        row_fill = _fill(COLOR_WHITE if (r - 3) % 2 == 0 else COLOR_LIGHT_GREY)
+        a = cs.cell(row=r, column=1, value=label)
+        a.font = _font()
+        a.fill = row_fill
+        for empty_col in [2, 4]:
+            cs.cell(row=r, column=empty_col).fill = row_fill
+
+        src_ws = sheets.get(src_key)
+        src_row = find_row(src_ws, src_label) if src_ws else None
+
+        offset = offsets.get(src_key, 0)
+        if src_row and src_ws:
+            # TTM
+            c_ttm = cs.cell(row=r, column=3)
+            c_ttm.fill = row_fill
+            ttm_c = ttm_cols.get(src_key)
+            if ttm_c:
+                c_ttm.value = f"={src_key}!{get_column_letter(ttm_c)}{src_row}"
+            c_ttm.font = _font(color=COLOR_GREEN)
+            c_ttm.number_format = number_format
+            c_ttm.alignment = _align("right")
+
+            # 12 quarters
+            for q_idx in range(12):
+                col = 5 + q_idx
+                src_col = (5 + q_idx) + offset
+                cell = cs.cell(row=r, column=col)
+                cell.fill = row_fill
+                cell.value = f"={src_key}!{get_column_letter(src_col)}{src_row}"
+                cell.font = _font(color=COLOR_GREEN)
+                cell.number_format = number_format
+                cell.alignment = _align("right")
+
+            # NTM
+            c_ntm = cs.cell(row=r, column=17)
+            c_ntm.fill = row_fill
+            ntm_c = ntm_cols.get(src_key)
+            if ntm_c:
+                c_ntm.value = f'=IFERROR({src_key}!{get_column_letter(ntm_c)}{src_row},"")'
+            c_ntm.font = _font(color=COLOR_GREEN)
+            c_ntm.number_format = number_format
+            c_ntm.alignment = _align("right")
+        else:
+            for col in [3] + list(range(5, 18)):
+                cs.cell(row=r, column=col).fill = row_fill
+
+        cs.row_dimensions[r].height = 14
+        current_row[0] += 1
+
+    def blank_row():
+        cs.row_dimensions[current_row[0]].height = 6
+        current_row[0] += 1
+
+    # ═══════ BANKING INCOME STATEMENT ═══════
+    section_header("INCOME STATEMENT")
+    data_row("Total Interest Income",       "IS", "Total Interest Income")
+    data_row("Total Interest Expense",      "IS", "Total Interest Expense")
+    data_row("Net Interest Income",         "IS", "Net Interest Income")
+    data_row("Total Noninterest Income",    "IS", "Total noninterest income|Total Non-Interest Income")
+    data_row("Total Revenue",               "IS", "Total revenue, net of interest|Total Revenue")
+    data_row("Provision for Credit Losses", "IS", "Provision for credit")
+    data_row("Total Noninterest Expense",   "IS", "Total noninterest expense|Total Non-Interest Expense")
+    data_row("Income Before Taxes",         "IS", "Income before income tax")
+    data_row("Net Income",                  "IS", "Net income applicable to common|Net income (B)|Net Income")
+    data_row("Diluted EPS",                 "IS", "Diluted earnings|Diluted EPS")
+    blank_row()
+
+    # ═══════ BANKING SEGMENTS ═══════
+    if sheets.get("SEG"):
+        section_header("SEGMENTS")
+        sub_header("Segment Revenue")
+        # Auto-detect segment revenue rows
+        seg_ws = sheets["SEG"]
+        for r in range(1, min(seg_ws.max_row + 1, 50)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if "Revenue" in label and "Total" not in label:
+                clean = label.replace(" (B)", "").strip()
+                data_row(clean, "SEG", label)
+
+        sub_header("Segment Pre-Tax Income")
+        for r in range(1, min(seg_ws.max_row + 1, 50)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if ("Income Before Taxes" in label or "EBT" in label) and "Total" not in label:
+                clean = label.replace(" (B)", "").strip()
+                data_row(clean, "SEG", label)
+
+        sub_header("Segment NII")
+        for r in range(1, min(seg_ws.max_row + 1, 50)):
+            label = str(seg_ws.cell(row=r, column=1).value or "").strip()
+            if "Net Interest Income" in label and "Total" not in label:
+                clean = label.replace(" (B)", "").strip()
+                data_row(clean, "SEG", label)
+        blank_row()
+
+    # ═══════ BALANCE SHEET ═══════
+    section_header("BALANCE SHEET")
+    data_row("Cash & Equivalents",      "BS", "Cash and cash equivalents|Cash and due")
+    data_row("Total Loans & Leases",    "BS", "Loans and leases, net|Loans and leases (B)")
+    data_row("Total Debt Securities",   "BS", "Total debt securities")
+    data_row("Total Assets",            "BS", "Total assets")
+    data_row("Total Deposits",          "BS", "Total deposits")
+    data_row("Long-Term Debt",          "BS", "Long-term debt (B)|Long-Term Debt (B)")
+    data_row("Total Liabilities",       "BS", "Total liabilities")
+    data_row("Shareholders' Equity",    "BS", "Total Shareholders|Total shareholders")
+    blank_row()
+
+    # ═══════ VALUATION ═══════
+    section_header("VALUATION")
+    sub_header("Price Multiples")
+    data_row("P/E",             "RAT", "P/E ",    FMT_RATIO)
+    data_row("P/B",             "RAT", "P/B ",    FMT_RATIO)
+    data_row("P/S",             "RAT", "P/S ",    FMT_RATIO)
+    data_row("Dividend Yield",  "RAT", "Dividend Yield",  FMT_PCT)
+    data_row("Earnings Yield",  "RAT", "Earnings Yield",  FMT_PCT)
+
+    sub_header("Returns & Efficiency")
+    data_row("ROE",                     "RAT", "Return on Equity",          FMT_PCT)
+    data_row("Return on Tangible Assets","RAT", "Return on Tangible Assets", FMT_PCT)
+    data_row("Net Profit Margin",       "RAT", "Net Profit Margin",         FMT_PCT)
+    data_row("Efficiency Ratio",        "RAT", "Efficiency Ratio|EBITDA Margin", FMT_PCT)
+
+    sub_header("Credit Quality")
+    data_row("Debt Ratio",              "RAT", "Debt Ratio",               FMT_RATIO)
+    data_row("Assets to Equity",        "RAT", "Assets to Equity",         FMT_RATIO)
+    data_row("Debt / Equity",           "RAT", "Debt / Equity|Debt/Equity", FMT_RATIO)
+    blank_row()
+
+    # ═══════ BULL BEAR ═══════
+    bb = wb.create_sheet("Bull Bear & Tailwinds")
+    bb.column_dimensions["A"].width = 80
+    bb_section_map = [
+        ("bull_case", "Bull Case"),
+        ("bear_case", "Bear Case"),
+        ("tailwinds", "Key Tailwinds"),
+        ("headwinds", "Key Risks"),
+        ("watchlist_metrics", "Watchlist Metrics"),
+    ]
+    bb_row = 1
+    for json_key, section_name in bb_section_map:
+        bb.merge_cells(f"A{bb_row}:H{bb_row}")
+        hdr = bb[f"A{bb_row}"]
+        hdr.value = section_name
+        hdr.font = _font(bold=True, color=COLOR_WHITE)
+        hdr.fill = _fill(COLOR_BLACK)
+        hdr.alignment = _align("left", indent=1)
+        bb.row_dimensions[bb_row].height = 16
+        bb_row += 1
+        items = (bull_bear or {}).get(json_key, [])
+        if items:
+            for i, item in enumerate(items):
+                cell = bb.cell(row=bb_row, column=1, value=f"  {i+1}. {item}")
+                cell.font = _font()
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.fill = _fill(COLOR_WHITE if i % 2 == 0 else COLOR_LIGHT_GREY)
+                bb.row_dimensions[bb_row].height = 28
+                bb_row += 1
+        else:
+            for _ in range(5):
+                bb.row_dimensions[bb_row].height = 14
+                bb_row += 1
+        bb_row += 1
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.read()
+
+
 # ─── Handler ──────────────────────────────────────────────────────────────────
 
 class handler(BaseHTTPRequestHandler):
@@ -758,8 +1009,9 @@ class handler(BaseHTTPRequestHandler):
             # 4. Fetch bull/bear thesis from DB (if previously generated)
             bull_bear = fetch_bull_bear(company_id)
 
-            # 5. Build Excel (software template for now; extend for other company types)
-            excel_bytes = build_software_template(
+            # 5. Build Excel using the right template
+            build_fn = build_banking_template if company_type == "banking" else build_software_template
+            excel_bytes = build_fn(
                 sheets, offsets, quarters, ttm_cols, ntm_cols, ticker, company_name,
                 bull_bear=bull_bear,
             )
