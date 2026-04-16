@@ -400,16 +400,29 @@ def detect_offsets(sheets: dict) -> tuple:
 
 # ─── Row Finder ───────────────────────────────────────────────────────────────
 
-def find_row(ws, search_str: str, col: int = 1) -> int | None:
+def find_row(ws, search_str: str, col: int = 1, prefer_data: bool = True) -> int | None:
     """Scan a column for a case-insensitive partial match. Returns 1-based row.
     search_str can be a single string or pipe-separated alternatives: 'Revenue|Total Revenues'
+
+    When prefer_data=True (default), among matching rows prefer ones that have
+    actual data in col B (fiscal.ai files have parent rows with formulas/no cached
+    values and child rows with actual numbers).
     """
     needles = [n.strip().lower() for n in search_str.split("|")]
     for needle in needles:
+        match_with_data = None
+        match_any = None
         for row in range(1, ws.max_row + 1):
             val = str(ws.cell(row=row, column=col).value or "").lower()
             if needle in val:
-                return row
+                if match_any is None:
+                    match_any = row
+                if prefer_data and ws.cell(row=row, column=2).value is not None:
+                    if match_with_data is None:
+                        match_with_data = row
+        result = match_with_data if (prefer_data and match_with_data) else match_any
+        if result is not None:
+            return result
     return None
 
 
@@ -853,15 +866,15 @@ def build_banking_template(
 
     # ═══════ BANKING INCOME STATEMENT ═══════
     section_header("INCOME STATEMENT")
-    data_row("Total Interest Income",       "IS", "Total Interest Income")
-    data_row("Total Interest Expense",      "IS", "Total Interest Expense")
-    data_row("Net Interest Income",         "IS", "Net Interest Income")
-    data_row("Total Noninterest Income",    "IS", "Total noninterest income|Total Non-Interest Income")
-    data_row("Total Revenue",               "IS", "Total revenue, net of interest|Total Revenue")
+    data_row("Interest Income",             "IS", "Interest income")
+    data_row("Interest Expense",            "IS", "Interest expense")
+    data_row("Net Interest Income",         "IS", "Net interest income")
+    data_row("Total Noninterest Income",    "IS", "Total noninterest income")
+    data_row("Total Revenue",               "IS", "Total revenue, net of interest")
     data_row("Provision for Credit Losses", "IS", "Provision for credit")
-    data_row("Total Noninterest Expense",   "IS", "Total noninterest expense|Total Non-Interest Expense")
+    data_row("Total Noninterest Expense",   "IS", "Total noninterest expense")
     data_row("Income Before Taxes",         "IS", "Income before income tax")
-    data_row("Net Income",                  "IS", "Net income applicable to common|Net income (B)|Net Income")
+    data_row("Net Income",                  "IS", "Net income applicable to common|Net income")
     data_row("Diluted EPS",                 "IS", "Diluted earnings|Diluted EPS")
     blank_row()
 
