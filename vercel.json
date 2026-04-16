@@ -1,11 +1,5 @@
 {
   "framework": "nextjs",
-  "buildCommand": "pnpm --filter @workspace/script-research run build",
-  "outputDirectory": "artifacts/script-research/.next",
-  "installCommand": "pnpm install",
-  "functions": {
-    "api/build_core_sheet.py": {
-      "maxDuration": 60
-    }
-  }
+  "installCommand": "cd ../.. && pnpm install",
+  "buildCommand": "pnpm run build"
 }
