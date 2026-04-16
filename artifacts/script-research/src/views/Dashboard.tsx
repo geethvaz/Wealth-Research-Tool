@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Eye, RefreshCw, TrendingUp, Database, CheckCircle2, Clock, Upload } from "lucide-react";
+import { Plus, Eye, RefreshCw, TrendingUp, Database, CheckCircle2, Clock, Upload, AlertTriangle } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -162,9 +162,17 @@ export function Dashboard() {
     }
   };
 
+  const STALE_THRESHOLD_MS = 45 * 24 * 60 * 60 * 1000;
+
+  const isStale = (lastUpdated: string | null): boolean => {
+    if (!lastUpdated) return false;
+    return Date.now() - new Date(lastUpdated).getTime() > STALE_THRESHOLD_MS;
+  };
+
   const totalCompanies = companies.length;
   const upToDate = companies.filter((c) => c.status === "current").length;
   const withData = companies.filter((c) => c.core_data).length;
+  const staleCount = companies.filter((c) => isStale(c.last_updated)).length;
   const lastUpdated = companies.reduce<string | null>((latest, c) => {
     if (!c.last_updated) return latest;
     if (!latest || c.last_updated > latest) return c.last_updated;
@@ -259,6 +267,16 @@ export function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Staleness Banner */}
+        {!loading && staleCount > 0 && (
+          <div className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-900/20 p-4 mb-6 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              {staleCount} {staleCount === 1 ? "company has" : "companies have"} data older than 45 days. New quarterly data may be available on fiscal.ai.
+            </p>
+          </div>
+        )}
 
         {/* Error State */}
         {error && (
@@ -384,16 +402,25 @@ export function Dashboard() {
                           </TableCell>
                           <TableCell className="text-center">
                             {cd ? (
-                              <Badge
-                                variant="outline"
-                                className={`rounded-full px-2.5 py-0.5 border-0 text-[11px] font-semibold ${
-                                  company.status === "current"
-                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                    : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                }`}
-                              >
-                                {company.status === "current" ? "Current" : "Needs Update"}
-                              </Badge>
+                              isStale(company.last_updated) ? (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full px-2.5 py-0.5 border-0 text-[11px] font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                >
+                                  Stale
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className={`rounded-full px-2.5 py-0.5 border-0 text-[11px] font-semibold ${
+                                    company.status === "current"
+                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                  }`}
+                                >
+                                  {company.status === "current" ? "Current" : "Needs Update"}
+                                </Badge>
+                              )
                             ) : (
                               <Badge
                                 variant="outline"

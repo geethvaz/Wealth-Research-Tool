@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Upload } from "lucide-react";
+import { Upload, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import {
@@ -180,6 +180,28 @@ export function Analytics() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const generateSummary = async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+    setSummaryText(null);
+    try {
+      const res = await fetch("/api/portfolio-summary", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setSummaryText(data.summary);
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : "Failed to generate summary");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   const fetchCompanies = useCallback(() => {
     fetch("/api/companies")
@@ -404,14 +426,52 @@ export function Analytics() {
     <Layout>
       <div className="p-6 lg:p-8 max-w-[1400px] w-full mx-auto" data-testid="page-analytics">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Analytics
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Cross-company comparison across {dataCompanies.length} companies in your coverage universe
-          </p>
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Analytics
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Cross-company comparison across {dataCompanies.length} companies in your coverage universe
+            </p>
+          </div>
+          <Button
+            className="bg-[#0D9488] hover:bg-teal-700 text-white rounded-xl shadow-sm transition-all duration-150 h-10 px-5"
+            onClick={generateSummary}
+            disabled={summaryLoading}
+          >
+            {summaryLoading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            {summaryLoading ? "Generating..." : "Generate Portfolio Brief"}
+          </Button>
         </div>
+
+        {/* Portfolio Summary */}
+        {summaryError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800/50 p-4 mb-6 text-sm text-red-700 dark:text-red-400">
+            {summaryError}
+          </div>
+        )}
+        {summaryText && (
+          <Card className="rounded-xl shadow-sm border-slate-200 dark:border-slate-800 mb-6">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="h-4 w-4 text-[#0D9488]" />
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Portfolio Brief</h2>
+              </div>
+              <div className="prose prose-sm prose-slate dark:prose-invert max-w-none">
+                {summaryText.split("\n\n").map((paragraph, i) => (
+                  <p key={i} className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 mb-4 last:mb-0">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Section 1: Valuation Scatter Plot */}
         <Card className="rounded-xl shadow-sm border-slate-200 dark:border-slate-800 mb-6">

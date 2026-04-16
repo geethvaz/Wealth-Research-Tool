@@ -7,7 +7,7 @@ import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, Building2, DollarSign, BarChart3, Percent, TrendingUp, TrendingDown, AlertTriangle, Wind, Zap } from "lucide-react";
+import { ChevronLeft, Building2, DollarSign, BarChart3, Percent, TrendingUp, TrendingDown, AlertTriangle, Wind, Zap, Save, Check, FileText } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -389,6 +389,77 @@ function ThesisSection({ bull_bear }: { bull_bear: NonNullable<CoreSheet["bull_b
   );
 }
 
+function ResearchNotes({ ticker }: { ticker: string }) {
+  const [notes, setNotes] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/companies/${ticker}/notes`)
+      .then((res) => res.json())
+      .then((d: { notes?: string }) => {
+        setNotes(d.notes ?? "");
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [ticker]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await fetch(`/api/companies/${ticker}/notes`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // silent fail
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <div className="h-1 w-1 rounded-full bg-[#0D9488]" />
+        Research Notes
+      </h3>
+      <Card className="rounded-xl border border-slate-200 dark:border-slate-700/50 shadow-sm">
+        <CardContent className="p-5">
+          <textarea
+            className="w-full min-h-[120px] bg-transparent text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 dark:placeholder:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg p-3 resize-y focus:outline-none focus:ring-2 focus:ring-[#0D9488]/30 focus:border-[#0D9488] transition-all duration-150"
+            placeholder={`Add research notes for ${ticker}...`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={handleSave}
+          />
+          <div className="flex items-center justify-end mt-2 h-5">
+            {saving && (
+              <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                <Save className="h-3 w-3 animate-pulse" />
+                Saving...
+              </span>
+            )}
+            {saved && !saving && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                <Check className="h-3 w-3" />
+                Saved
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function CompanyDetail() {
   const params = useParams<{ ticker: string }>();
   const ticker = (params.ticker as string)?.toUpperCase() || "";
@@ -449,35 +520,45 @@ export function CompanyDetail() {
               {error}
             </div>
           ) : data ? (
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600 shadow-sm">
-                <Building2 className="h-6 w-6 text-slate-500 dark:text-slate-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-                    {data.name}
-                  </h1>
-                  <Badge variant="outline" className="rounded-md px-2.5 py-0.5 text-xs font-bold tracking-wide">
-                    {data.ticker}
-                  </Badge>
-                  {data.exchange && (
-                    <Badge variant="outline" className="rounded-md px-2.5 py-0.5 text-xs text-slate-500">
-                      {data.exchange}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600 shadow-sm">
+                  <Building2 className="h-6 w-6 text-slate-500 dark:text-slate-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                      {data.name}
+                    </h1>
+                    <Badge variant="outline" className="rounded-md px-2.5 py-0.5 text-xs font-bold tracking-wide">
+                      {data.ticker}
                     </Badge>
-                  )}
-                  {data.company_type && (
-                    <Badge className="rounded-md px-2.5 py-0.5 text-xs bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border-0 font-semibold uppercase tracking-wide">
-                      {data.company_type}
-                    </Badge>
+                    {data.exchange && (
+                      <Badge variant="outline" className="rounded-md px-2.5 py-0.5 text-xs text-slate-500">
+                        {data.exchange}
+                      </Badge>
+                    )}
+                    {data.company_type && (
+                      <Badge className="rounded-md px-2.5 py-0.5 text-xs bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 border-0 font-semibold uppercase tracking-wide">
+                        {data.company_type}
+                      </Badge>
+                    )}
+                  </div>
+                  {data.last_updated && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      Last updated {new Date(data.last_updated).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                    </p>
                   )}
                 </div>
-                {data.last_updated && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    Last updated {new Date(data.last_updated).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                  </p>
-                )}
               </div>
+              <Link
+                href={`/report/${data.ticker}`}
+                target="_blank"
+                className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl shadow-sm transition-all duration-150 h-9 px-4 text-sm font-medium border border-slate-200 dark:border-slate-700"
+              >
+                <FileText className="h-4 w-4" />
+                Export Report
+              </Link>
             </div>
           ) : null}
         </div>
@@ -552,6 +633,16 @@ export function CompanyDetail() {
 
             {/* Investment Thesis */}
             {bb && <ThesisSection bull_bear={bb} />}
+
+            {/* Research Notes */}
+            <ResearchNotes ticker={ticker} />
+          </div>
+        )}
+
+        {/* Show Research Notes even without core sheet data */}
+        {!loading && !error && data && !cs && (
+          <div className="mt-8">
+            <ResearchNotes ticker={ticker} />
           </div>
         )}
       </div>

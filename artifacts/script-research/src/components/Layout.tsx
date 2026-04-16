@@ -7,6 +7,7 @@ import {
   TrendingUp,
   LayoutDashboard,
   BarChart3,
+  ArrowLeftRight,
   CloudUpload,
   Settings,
   Moon,
@@ -42,6 +43,7 @@ export function Layout({ children }: LayoutProps) {
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Compare", href: "/compare", icon: ArrowLeftRight },
     { name: "Upload", href: "/upload", icon: CloudUpload },
     { name: "Settings", href: "/settings", icon: Settings },
   ];

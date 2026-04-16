@@ -16,6 +16,8 @@ export async function GET() {
         const [cs] = await db
           .select({
             income_statement: coreSheetsTable.income_statement,
+            cash_flow: coreSheetsTable.cash_flow,
+            balance_sheet: coreSheetsTable.balance_sheet,
             valuation: coreSheetsTable.valuation,
             bull_bear: coreSheetsTable.bull_bear,
             quarters: coreSheetsTable.quarters,
