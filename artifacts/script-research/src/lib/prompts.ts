@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
 import { getDb, promptsTable } from "./db";
 
 // Editable AI prompts live here. Each prompt is split into three sections:
@@ -104,9 +105,45 @@ export async function loadPrompt(key: string): Promise<{
   };
 }
 
+// Self-heals missing prompt tables. The production Neon DB may not have these
+// tables yet if the schema was never pushed against it — this creates them on
+// first admin access and is a no-op afterwards. Safe to call on every admin
+// request.
+export async function ensurePromptTables(): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  const sql = neon(url);
+  await sql`
+    CREATE TABLE IF NOT EXISTS prompts (
+      id SERIAL PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      role_text TEXT NOT NULL,
+      rules_text TEXT NOT NULL,
+      output_schema TEXT NOT NULL,
+      model TEXT NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS prompt_versions (
+      id SERIAL PRIMARY KEY,
+      prompt_key TEXT NOT NULL,
+      role_text TEXT NOT NULL,
+      rules_text TEXT NOT NULL,
+      notes TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      created_by TEXT
+    )
+  `;
+}
+
 export async function ensurePromptSeeded(key: string): Promise<void> {
   const fallback = DEFAULT_PROMPTS[key];
   if (!fallback) throw new Error(`Unknown prompt key: ${key}`);
+
+  await ensurePromptTables();
 
   const db = getDb();
   const rows = await db
