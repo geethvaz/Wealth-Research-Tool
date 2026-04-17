@@ -21,7 +21,7 @@ entire workflow: upload files, auto-detect everything, build Excel, download/syn
 - Frontend + API routes: Next.js 15 (App Router), Tailwind CSS, shadcn/ui, TypeScript
 - Database: Neon PostgreSQL via @neondatabase/serverless + Drizzle ORM
 - Excel builder: Python (openpyxl) via Vercel Python serverless function at `/api/build_core_sheet.py`
-- AI: Claude Sonnet via Anthropic SDK (use model name `claude-sonnet-4-5`, not dated versions)
+- AI: Claude via Anthropic SDK. Models in use: `claude-opus-4-7` for bull/bear thesis generation, `claude-sonnet-4-6` for screenshot vision extraction. Use bare model IDs, never dated versions.
 - File storage: Neon (base64 in uploaded_files table) + OneDrive output via Microsoft Graph API
 - Charts: Recharts
 - Icons: Lucide React
