@@ -73,6 +73,28 @@ export const coreSheetsTable = pgTable("core_sheets", {
   updated_at: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const promptsTable = pgTable("prompts", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  role_text: text("role_text").notNull(),
+  rules_text: text("rules_text").notNull(),
+  output_schema: text("output_schema").notNull(),
+  model: text("model").notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
+  updated_by: text("updated_by"),
+});
+
+export const promptVersionsTable = pgTable("prompt_versions", {
+  id: serial("id").primaryKey(),
+  prompt_key: text("prompt_key").notNull(),
+  role_text: text("role_text").notNull(),
+  rules_text: text("rules_text").notNull(),
+  notes: text("notes").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  created_by: text("created_by"),
+});
+
 // ─── Database connection ────────────────────────────────────────────────────
 
 export function getDb() {

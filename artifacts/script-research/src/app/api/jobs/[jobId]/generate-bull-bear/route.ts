@@ -3,36 +3,9 @@ import { eq } from "drizzle-orm";
 import { neon } from "@neondatabase/serverless";
 import { getDb, companiesTable, buildJobsTable } from "@/lib/db";
 import { getAnthropicClient } from "@/lib/anthropic";
+import { assembleSystemPrompt, loadPrompt } from "@/lib/prompts";
 
 export const maxDuration = 60;
-
-const SYSTEM_PROMPT = `You are a senior equity research analyst at a top-tier wealth management firm. You have access to the company's actual quarterly financial data. Analyze the data carefully and generate a specific, data-driven investment thesis.
-
-Rules:
-- Every bullet point MUST reference actual numbers, margins, growth rates, or trends from the data provided
-- Be direct and specific — no generic statements like "strong market position" without data backing
-- Reference specific quarters, YoY changes, margin trends, and absolute figures
-- If you see declining metrics, call them out honestly in the bear case
-- Tailwinds should be structural/industry-level drivers specific to the company's business
-
-Return ONLY valid JSON in this exact structure:
-{
-  "bull_case": [
-    "string (3-5 items, each 1-2 sentences with specific numbers)"
-  ],
-  "bear_case": [
-    "string (3-5 items, each 1-2 sentences with specific numbers)"
-  ],
-  "tailwinds": [
-    "string (3-5 structural tailwinds specific to the company's industry and business model)"
-  ],
-  "headwinds": [
-    "string (3-5 risks or headwinds with data backing where possible)"
-  ],
-  "watchlist_metrics": [
-    "string (5-6 specific metrics to monitor going forward, with current values and why they matter)"
-  ]
-}`;
 
 export async function POST(
   _req: NextRequest,
@@ -79,11 +52,13 @@ export async function POST(
       : "No detailed financial data available. Generate thesis based on company profile.";
 
     const anthropic = getAnthropicClient();
+    const prompt = await loadPrompt("bull_bear");
+    const systemPrompt = assembleSystemPrompt(prompt);
 
     const response = await anthropic.messages.create({
-      model: "claude-opus-4-7",
+      model: prompt.model,
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [
         {
           role: "user",

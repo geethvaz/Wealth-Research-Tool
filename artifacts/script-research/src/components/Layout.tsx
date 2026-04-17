@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   CloudUpload,
   Settings,
+  ShieldCheck,
   Moon,
   Sun,
 } from "lucide-react";
@@ -46,6 +47,7 @@ export function Layout({ children }: LayoutProps) {
     { name: "Compare", href: "/compare", icon: ArrowLeftRight },
     { name: "Upload", href: "/upload", icon: CloudUpload },
     { name: "Settings", href: "/settings", icon: Settings },
+    { name: "Admin", href: "/admin/prompts", icon: ShieldCheck },
   ];
 
   return (
